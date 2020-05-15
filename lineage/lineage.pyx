@@ -36,15 +36,15 @@ cdef class Event:
 	#	return <Propensity>self.propensity
 
 	#Meant to be subclassed if an event is supposed to do something.
-	cdef double evaluate_event(self, double *state, double *params, double volume, double time):
+	cdef double evaluate_event(self, double[:] state, double *params, double volume, double time):
 		return 0
 
 #Volume Events are stochastic events which alter a single cell's volume.
 cdef class VolumeEvent(Event):
-	cdef double evaluate_event(self, double *state, double *params, double volume, double time):
+	cdef double evaluate_event(self, double[:] state, double *params, double volume, double time):
 		return self.get_volume(state, params,volume, time)
 
-	cdef double get_volume(self, double *state, double *params, double volume, double time):
+	cdef double get_volume(self, double[:] state, double *params, double volume, double time):
 		raise NotImplementedError("VolumeEvent must be subclassed")
 
 	def get_species_and_parameters(self, dict event_fields):
@@ -60,7 +60,7 @@ cdef class LinearVolumeEvent(VolumeEvent):
 			else:
 				warnings.warn("Useless paramter for LinearVolumeEvent: "+str(k))
 
-	cdef double get_volume(self, double *state, double *params, double volume, double time):
+	cdef double get_volume(self, double[:] state, double *params, double volume, double time):
 		return volume + params[self.growth_rate_ind]
 
 	def get_species_and_parameters(self, dict event_fields):
@@ -78,7 +78,7 @@ cdef class MultiplicativeVolumeEvent(VolumeEvent):
 			else:
 				warnings.warn("Useless paramter for MultiplicativeVolumeEvent: "+str(k))
 
-	cdef double get_volume(self, double *state, double *params, double volume, double time):
+	cdef double get_volume(self, double[:] state, double *params, double volume, double time):
 		return volume*(1+params[self.growth_rate_ind])
 
 	def get_species_and_parameters(self, dict event_fields):
@@ -94,8 +94,8 @@ cdef class GeneralVolumeEvent(VolumeEvent):
 			else:
 				warnings.warn("Useless paramter for GeneralVolumeEvent: "+str(k))
 
-	cdef double get_volume(self, double *state, double *params, double volume, double time):
-		return (<Term>self.volume_equation).volume_evaluate(state,params,volume,time)
+	cdef double get_volume(self, double[:] state, double *params, double volume, double time):
+		return (<Term>self.volume_equation).volume_evaluate(<double*> state,params,volume,time)
 
 
 	def get_species_and_parameters(self, dict event_fields):
@@ -115,7 +115,7 @@ cdef class DivisionEvent(Event):
 	#	return <Propensity>self.propensity
 
 	#Return 1 indicated the cell divided. 0 indicates it didn't. Could be used in a subclass.
-	cdef double evaluate_event(self, double *state, double *params, double volume, double time):
+	cdef double evaluate_event(self, double[:] state, double *params, double volume, double time):
 		return 1
 
 	def get_species_and_parameters(self, dict event_fields):
@@ -132,7 +132,7 @@ cdef class DeathEvent(Event):
 
 	#Could be subclassed to have more complex logic for if a cell dies when this event occurs
 	#0 indicates not dead. 1 indicates dead.
-	cdef double evaluate_event(self, double *state, double *params, double volume, double time):
+	cdef double evaluate_event(self, double[:] state, double *params, double volume, double time):
 		return 1
 
 #Dummy class to help with inheritance, compilation, and code simplification. Does nothing
@@ -239,7 +239,7 @@ cdef class ODEVolumeRule(VolumeRule):
 #Division rules are checked at the beginning of each simulation loop to see if a cell should divide
 cdef class DivisionRule(LineageRule):
 
-	cdef unsigned check_divide(self, double *state, double *params, double time, double volume, double initial_time, double initial_volume):
+	cdef unsigned check_divide(self, double[:] state, double *params, double time, double volume, double initial_time, double initial_volume):
 		raise NotImplementedError("check_divide must be implemented in DivisionRule subclasses")
 
 	def initialize(self, dict param_dictionary, dict species_indices, dict parameter_indices):
@@ -253,7 +253,7 @@ cdef class TimeDivisionRule(DivisionRule):
 	cdef unsigned has_noise
 	cdef unsigned threshold_ind
 	cdef unsigned threshold_noise_ind
-	cdef unsigned check_divide(self, double *state, double *params, double time, double volume, double initial_time, double initial_volume):
+	cdef unsigned check_divide(self, double[:] state, double *params, double time, double volume, double initial_time, double initial_volume):
 		if self.has_noise > 0:
 			if time-initial_time >= params[self.threshold_ind]+normal_rv(0, params[self.threshold_noise_ind]):
 				return 1
@@ -288,7 +288,7 @@ cdef class VolumeDivisionRule(DivisionRule):
 	cdef unsigned has_noise
 	cdef unsigned threshold_ind
 	cdef unsigned threshold_noise_ind
-	cdef unsigned check_divide(self, double *state, double *params, double time, double volume, double initial_time, double initial_volume):
+	cdef unsigned check_divide(self, double[:] state, double *params, double time, double volume, double initial_time, double initial_volume):
 		if self.has_noise > 0:
 			if volume >= params[self.threshold_ind]+normal_rv(0, params[self.threshold_noise_ind]):
 				return 1
@@ -323,7 +323,7 @@ cdef class DeltaVDivisionRule(DivisionRule):
 	cdef unsigned has_noise
 	cdef unsigned threshold_ind
 	cdef unsigned threshold_noise_ind
-	cdef unsigned check_divide(self, double *state, double *params, double time, double volume, double initial_time, double initial_volume):
+	cdef unsigned check_divide(self, double[:] state, double *params, double time, double volume, double initial_time, double initial_volume):
 		if self.has_noise > 0:
 			if volume - initial_volume >= params[self.threshold_ind]+normal_rv(0, params[self.threshold_noise_ind]):
 				return 1
@@ -359,8 +359,8 @@ cdef class DeltaVDivisionRule(DivisionRule):
 #returns 1 if equation(state, params, volume, time) > 0
 cdef class GeneralDivisionRule(DivisionRule):
 	cdef Term equation
-	cdef unsigned check_divide(self, double *state, double *params, double time, double volume, double initial_time, double intial_volume):
-		if (<Term> self.equation).volume_evaluate(state,params,volume,time) > 0:
+	cdef unsigned check_divide(self, double[:] state, double *params, double time, double volume, double initial_time, double intial_volume):
+		if (<Term> self.equation).volume_evaluate(<double*> state,params,volume,time) > 0:
 			return 1
 		else:
 			return 0
@@ -379,7 +379,7 @@ cdef class GeneralDivisionRule(DivisionRule):
 
 #Death rules are checked at the beginning of each simulation loop to see if a cell should die
 cdef class DeathRule(LineageRule):
-	cdef unsigned check_dead(self, double *state, double *params, double time, double volume, double initial_time, double initial_volume):
+	cdef unsigned check_dead(self, double[:] state, double *params, double time, double volume, double initial_time, double initial_volume):
 		raise NotImplementedError("check_dead must be implemented in DeathRule subclasses.")
 
 	def initialize(self, dict param_dictionary, dict species_indices, dict parameter_indices):
@@ -396,7 +396,7 @@ cdef class SpeciesDeathRule(DeathRule):
 	cdef unsigned threshold_noise_ind
 	cdef int comp
 	cdef double threshold
-	cdef unsigned check_dead(self, double *state, double *params, double time, double volume, double initial_time, double initial_volume):
+	cdef unsigned check_dead(self, double[:] state, double *params, double time, double volume, double initial_time, double initial_volume):
 		self.threshold = params[self.threshold_ind]
 		if self.has_noise > 0:
 			self.threshold = self.threshold + normal_rv(0, params[self.threshold_noise_ind])
@@ -449,7 +449,7 @@ cdef class ParamDeathRule(DeathRule):
 	cdef int comp
 	cdef double threshold
 
-	cdef unsigned check_dead(self, double *state, double *params, double time, double volume, double initial_time, double initial_volume):
+	cdef unsigned check_dead(self, double[:] state, double *params, double time, double volume, double initial_time, double initial_volume):
 		self.threshold = params[self.threshold_ind]
 		if self.has_noise > 0:
 			self.threshold = self.threshold + normal_rv(0, params[self.threshold_noise_ind])
@@ -496,8 +496,8 @@ cdef class ParamDeathRule(DeathRule):
 #A general death rule. Returns 1 if equation > 0. 0 otherwise
 cdef class GeneralDeathRule(DeathRule):
 	cdef Term equation
-	cdef unsigned check_dead(self, double *state, double *params, double time, double volume, double initial_time, double initial_volume):
-		if (<Term> self.equation).volume_evaluate(state,params,volume,time) > 0:
+	cdef unsigned check_dead(self, double[:] state, double *params, double time, double volume, double initial_time, double initial_volume):
+		if (<Term> self.equation).volume_evaluate(<double*>state,params,volume,time) > 0:
 			return 1
 		else:
 			return 0
@@ -1022,11 +1022,11 @@ cdef class LineageCSimInterface(ModelCSimInterface):
 		self.division_rule_volume_splitters, self.division_event_volume_splitters = M.py_get_volume_splitters()
 
 	#similar to compute_stochastic_volume_propensities but events are new included as well
-	cdef void compute_lineage_propensities(self, double *state, double *propensity_destination, double volume, double time):
+	cdef void compute_lineage_propensities(self, double[:] state, double *propensity_destination, double volume, double time):
 		for ind in range(self.num_reactions):
-			propensity_destination[ind] = (<Propensity> (self.c_propensities[0][ind])).get_stochastic_volume_propensity(state, self.c_param_values, volume, time)
+			propensity_destination[ind] = (<Propensity> (self.c_propensities[0][ind])).get_stochastic_volume_propensity(<double*>state, self.c_param_values, volume, time)
 		for ind in range(self.num_lineage_propensities):
-			propensity_destination[self.num_reactions+ind] = (<Propensity> (self.c_lineage_propensities[0][ind])).get_stochastic_volume_propensity(state, self.c_param_values, volume, time)
+			propensity_destination[self.num_reactions+ind] = (<Propensity> (self.c_lineage_propensities[0][ind])).get_stochastic_volume_propensity(<double*>state, self.c_param_values, volume, time)
 
 	#Applies all rules that change the volume of a cell
 	cdef double apply_volume_rules(self, double[:] state, double volume, double time, double dt):
@@ -1035,7 +1035,7 @@ cdef class LineageCSimInterface(ModelCSimInterface):
 		return volume
 
 	#Applies death rules in the order they were added to the model. Returns the index of the first death rule that returns True. -1 otherwise.
-	cdef int apply_death_rules(self, double *state, double volume, double time, double start_volume, double start_time):
+	cdef int apply_death_rules(self, double[:] state, double volume, double time, double start_volume, double start_time):
 		cdef unsigned isdead = 0
 		for ind in range(self.num_death_rules):
 			isdead = (<DeathRule>self.c_death_rules[0][ind]).check_dead(state, self.c_param_values, time, volume, start_time, start_volume)
@@ -1044,7 +1044,7 @@ cdef class LineageCSimInterface(ModelCSimInterface):
 		return -1
 
 	#Applies divison rules in the order they were added to the model. Returns the index of the first division rule that returns True. -1 otherwise
-	cdef int apply_division_rules(self, double *state, double volume, double time, double start_volume, double start_time):
+	cdef int apply_division_rules(self, double[:] state, double volume, double time, double start_volume, double start_time):
 		cdef unsigned divided = 0
 		for ind in range(self.num_division_rules):
 			divided = (<DivisionRule>self.c_division_rules[0][ind]).check_divide(state, self.c_param_values, time, volume, start_time, start_volume)
@@ -1054,7 +1054,7 @@ cdef class LineageCSimInterface(ModelCSimInterface):
 		return -1
 
 	#Applies a single volume event, determined by the index passed in
-	cdef double apply_volume_event(self, unsigned event_index, double *state, double current_time, double current_volume):
+	cdef double apply_volume_event(self, unsigned event_index, double[:] state, double current_time, double current_volume):
 		current_volume = (<VolumeEvent>self.c_volume_events[0][event_index]).get_volume(state, self.c_param_values, current_volume, current_time)
 		return current_volume
 
@@ -1391,12 +1391,12 @@ cdef class LineageSSASimulator:
 		# Do the SSA part now
 		while current_index < num_timepoints:
 			# Compute rules in place
-			sim.apply_repeated_volume_rules(self.c_current_state, current_volume, current_time)
+			sim.apply_repeated_volume_rules(<double*> self.c_current_state, current_volume, current_time)
 
 			#returns the index of the first DeathRule that returned True and -1 otherwise
-			cell_dead = sim.apply_death_rules(self.c_current_state.data, current_volume, current_time, initial_volume, initial_time)
+			cell_dead = sim.apply_death_rules(self.c_current_state, current_volume, current_time, initial_volume, initial_time)
 			#returns the index of the first DivisionRule that returned True and -1 otherwise
-			cell_divided = sim.apply_division_rules(self.c_current_state.data, current_volume, current_time, initial_volume, initial_time)
+			cell_divided = sim.apply_division_rules(self.c_current_state, current_volume, current_time, initial_volume, initial_time)
 			
 			#Break the loop if we are at a queued time
 			if cell_dead >= 0 and cell_divided >= 0:
@@ -1408,7 +1408,7 @@ cdef class LineageSSASimulator:
 			elif cell_divided >= 0:
 				break
 			#Compute Reaction and Event propensities in-place
-			sim.compute_lineage_propensities((self.c_current_state.data), <double*> (c_propensity.data), current_volume, current_time)
+			sim.compute_lineage_propensities(self.c_current_state, <double*> (c_propensity.data), current_volume, current_time)
 
 			Lambda = cyrandom.array_sum(<double*> (c_propensity.data), num_propensities)
 			#print("propensities computed")
@@ -1438,7 +1438,7 @@ cdef class LineageSSASimulator:
 			# IF the queue won, then update the volume and continue on or stop if the cell divided.
 			if move_to_queued_time == 1:
 				# Update the volume every dtyp
-				current_volume = sim.apply_volume_rules(<double*>(self.c_current_state.data), current_volume, current_time, delta_t)
+				current_volume = sim.apply_volume_rules(self.c_current_state, current_volume, current_time, delta_t)
 				v.set_volume(current_volume)
 
 			# if an actual reaction happened, do the reaction and maybe update the queue as well.
@@ -1458,7 +1458,7 @@ cdef class LineageSSASimulator:
 
 				#Propensity is a VolumeEvent
 				elif reaction_choice >= num_reactions and reaction_choice < num_reactions + num_volume_events:
-					current_volume = sim.apply_volume_event(reaction_choice - num_reactions, <double*>(self.c_current_state.data), current_time, current_volume)
+					current_volume = sim.apply_volume_event(reaction_choice - num_reactions, self.c_current_state, current_time, current_volume)
 					v.set_volume(current_volume)
 				#Propensity is a DivisionEvent.
 				elif reaction_choice >= num_reactions+num_volume_events and reaction_choice < num_reactions + num_volume_events+num_division_events:
