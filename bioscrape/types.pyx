@@ -1260,7 +1260,6 @@ cdef class StochasticTimeThresholdVolume(Volume):
         cdef double time_left = log(self.average_division_volume / volume) / self.growth_rate
         time_left = cyrandom.normal_rv(1.0, self.division_noise) * time_left
         self.division_time = time + time_left
-        #print("Volume:", volume, "Division Time:", self.division_time )
 
     cdef unsigned  cell_divided(self, double *state, double *params, double time, double volume, double dt):
         """
@@ -2406,6 +2405,7 @@ cdef class Lineage:
         cdef dict sch_dict = {}
         cdef Lineage new_lineage = Lineage()
         cdef np.ndarray newtime, newvolume, newdata, indices_to_keep
+        cdef unsigned i = 0
 
         sch_dict[None] = None
         for i in range(self.size()):

@@ -433,6 +433,12 @@ cdef class ModelCSimInterface(CSimInterface):
         self.num_species = self.update_array.shape[0]
         self.dt = 0.01
 
+    cdef unsigned get_number_of_species(self):
+        return self.num_species
+
+    cdef unsigned get_number_of_reactions(self):
+        return self.num_reactions
+
     cdef void check_interface(self):
         if not self.model.initialized:
             raise RuntimeError("Model has been changed since CSimInterface instantiation. CSimInterface no longer valid.")
@@ -487,6 +493,9 @@ cdef class ModelCSimInterface(CSimInterface):
 
     cdef unsigned get_num_parameters(self):
         return self.np_param_values.shape[0]
+
+    def py_get_initial_state(self):
+        return self.initial_state
 
 cdef class SafeModelCSimInterface(ModelCSimInterface):
     def __init__(self, external_model, max_volume = 1000, max_species_count = 1000):

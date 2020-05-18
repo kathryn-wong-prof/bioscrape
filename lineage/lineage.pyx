@@ -36,15 +36,15 @@ cdef class Event:
 	#	return <Propensity>self.propensity
 
 	#Meant to be subclassed if an event is supposed to do something.
-	cdef double evaluate_event(self, double[:] state, double *params, double volume, double time):
+	cdef double evaluate_event(self, double* state, double *params, double volume, double time):
 		return 0
 
 #Volume Events are stochastic events which alter a single cell's volume.
 cdef class VolumeEvent(Event):
-	cdef double evaluate_event(self, double[:] state, double *params, double volume, double time):
+	cdef double evaluate_event(self, double* state, double *params, double volume, double time):
 		return self.get_volume(state, params,volume, time)
 
-	cdef double get_volume(self, double[:] state, double *params, double volume, double time):
+	cdef double get_volume(self, double* state, double *params, double volume, double time):
 		raise NotImplementedError("VolumeEvent must be subclassed")
 
 	def get_species_and_parameters(self, dict event_fields):
@@ -60,7 +60,7 @@ cdef class LinearVolumeEvent(VolumeEvent):
 			else:
 				warnings.warn("Useless paramter for LinearVolumeEvent: "+str(k))
 
-	cdef double get_volume(self, double[:] state, double *params, double volume, double time):
+	cdef double get_volume(self, double* state, double *params, double volume, double time):
 		return volume + params[self.growth_rate_ind]
 
 	def get_species_and_parameters(self, dict event_fields):
@@ -78,7 +78,7 @@ cdef class MultiplicativeVolumeEvent(VolumeEvent):
 			else:
 				warnings.warn("Useless paramter for MultiplicativeVolumeEvent: "+str(k))
 
-	cdef double get_volume(self, double[:] state, double *params, double volume, double time):
+	cdef double get_volume(self, double* state, double *params, double volume, double time):
 		return volume*(1+params[self.growth_rate_ind])
 
 	def get_species_and_parameters(self, dict event_fields):
@@ -94,8 +94,8 @@ cdef class GeneralVolumeEvent(VolumeEvent):
 			else:
 				warnings.warn("Useless paramter for GeneralVolumeEvent: "+str(k))
 
-	cdef double get_volume(self, double[:] state, double *params, double volume, double time):
-		return (<Term>self.volume_equation).volume_evaluate(<double*> state,params,volume,time)
+	cdef double get_volume(self, double* state, double *params, double volume, double time):
+		return (<Term>self.volume_equation).volume_evaluate(state,params,volume,time)
 
 
 	def get_species_and_parameters(self, dict event_fields):
@@ -115,7 +115,7 @@ cdef class DivisionEvent(Event):
 	#	return <Propensity>self.propensity
 
 	#Return 1 indicated the cell divided. 0 indicates it didn't. Could be used in a subclass.
-	cdef double evaluate_event(self, double[:] state, double *params, double volume, double time):
+	cdef double evaluate_event(self, double* state, double *params, double volume, double time):
 		return 1
 
 	def get_species_and_parameters(self, dict event_fields):
@@ -132,7 +132,7 @@ cdef class DeathEvent(Event):
 
 	#Could be subclassed to have more complex logic for if a cell dies when this event occurs
 	#0 indicates not dead. 1 indicates dead.
-	cdef double evaluate_event(self, double[:] state, double *params, double volume, double time):
+	cdef double evaluate_event(self, double* state, double *params, double volume, double time):
 		return 1
 
 #Dummy class to help with inheritance, compilation, and code simplification. Does nothing
@@ -145,14 +145,14 @@ cdef class LineageRule:
 
 #Volume Rules occur every dt (determined by the simulation timepoints) and update the volume
 cdef class VolumeRule(LineageRule):
-	cdef double get_volume(self, double[:] state, double *params, double volume, double time, double dt):
+	cdef double get_volume(self, double* state, double *params, double volume, double time, double dt):
 		raise NotImplementedError("get_volume must be implemented in VolumeRule Subclasses")
 
 cdef class LinearVolumeRule(VolumeRule):
 	cdef unsigned has_noise
 	cdef unsigned growth_rate_ind
 	cdef unsigned noise_ind
-	cdef double get_volume(self, double[:] state, double *params, double volume, double time, double dt):
+	cdef double get_volume(self, double* state, double *params, double volume, double time, double dt):
 		if self.has_noise > 0:
 			return volume + (params[self.growth_rate_ind]+normal_rv(0, params[self.noise_ind]))*dt
 		else:
@@ -179,7 +179,7 @@ cdef class MultiplicativeVolumeRule(VolumeRule):
 	cdef unsigned has_noise
 	cdef unsigned growth_rate_ind
 	cdef unsigned noise_ind
-	cdef double get_volume(self, double[:] state, double *params, double volume, double time, double dt):
+	cdef double get_volume(self, double* state, double *params, double volume, double time, double dt):
 		if self.has_noise > 0:
 			return volume+volume*(params[self.growth_rate_ind]+normal_rv(0, params[self.noise_ind]))*dt
 		else:
@@ -204,8 +204,8 @@ cdef class MultiplicativeVolumeRule(VolumeRule):
 
 cdef class AssignmentVolumeRule(VolumeRule):
 	cdef Term volume_equation
-	cdef double get_volume(self, double[:] state, double *params, double volume, double time, double dt):
-		return (<Term>self.volume_equation).volume_evaluate(<double*> state,params,volume,time)
+	cdef double get_volume(self, double* state, double *params, double volume, double time, double dt):
+		return (<Term>self.volume_equation).volume_evaluate(state,params,volume,time)
 
 	def initialize(self, dict param_dictionary, dict species_indices, dict parameter_indices):
 		for (k, v) in param_dictionary.items():
@@ -221,8 +221,8 @@ cdef class AssignmentVolumeRule(VolumeRule):
 
 cdef class ODEVolumeRule(VolumeRule):
 	cdef Term volume_equation
-	cdef double get_volume(self, double[:] state, double *params, double volume, double time, double dt):
-		return volume+(<Term>self.volume_equation).volume_evaluate(<double*> state,params,volume,time)*dt
+	cdef double get_volume(self, double* state, double *params, double volume, double time, double dt):
+		return volume+(<Term>self.volume_equation).volume_evaluate(state,params,volume,time)*dt
 
 	def initialize(self, dict param_dictionary, dict species_indices, dict parameter_indices):
 		for (k, v) in param_dictionary.items():
@@ -239,7 +239,7 @@ cdef class ODEVolumeRule(VolumeRule):
 #Division rules are checked at the beginning of each simulation loop to see if a cell should divide
 cdef class DivisionRule(LineageRule):
 
-	cdef unsigned check_divide(self, double[:] state, double *params, double time, double volume, double initial_time, double initial_volume):
+	cdef int check_divide(self, double* state, double *params, double time, double volume, double initial_time, double initial_volume):
 		raise NotImplementedError("check_divide must be implemented in DivisionRule subclasses")
 
 	def initialize(self, dict param_dictionary, dict species_indices, dict parameter_indices):
@@ -253,7 +253,7 @@ cdef class TimeDivisionRule(DivisionRule):
 	cdef unsigned has_noise
 	cdef unsigned threshold_ind
 	cdef unsigned threshold_noise_ind
-	cdef unsigned check_divide(self, double[:] state, double *params, double time, double volume, double initial_time, double initial_volume):
+	cdef int check_divide(self, double* state, double *params, double time, double volume, double initial_time, double initial_volume):
 		if self.has_noise > 0:
 			if time-initial_time >= params[self.threshold_ind]+normal_rv(0, params[self.threshold_noise_ind]):
 				return 1
@@ -288,7 +288,7 @@ cdef class VolumeDivisionRule(DivisionRule):
 	cdef unsigned has_noise
 	cdef unsigned threshold_ind
 	cdef unsigned threshold_noise_ind
-	cdef unsigned check_divide(self, double[:] state, double *params, double time, double volume, double initial_time, double initial_volume):
+	cdef int check_divide(self, double* state, double *params, double time, double volume, double initial_time, double initial_volume):
 		if self.has_noise > 0:
 			if volume >= params[self.threshold_ind]+normal_rv(0, params[self.threshold_noise_ind]):
 				return 1
@@ -323,7 +323,7 @@ cdef class DeltaVDivisionRule(DivisionRule):
 	cdef unsigned has_noise
 	cdef unsigned threshold_ind
 	cdef unsigned threshold_noise_ind
-	cdef unsigned check_divide(self, double[:] state, double *params, double time, double volume, double initial_time, double initial_volume):
+	cdef int check_divide(self, double* state, double *params, double time, double volume, double initial_time, double initial_volume):
 		if self.has_noise > 0:
 			if volume - initial_volume >= params[self.threshold_ind]+normal_rv(0, params[self.threshold_noise_ind]):
 				return 1
@@ -331,8 +331,6 @@ cdef class DeltaVDivisionRule(DivisionRule):
 				return 0
 		else:
 			if volume - initial_volume >= params[self.threshold_ind] - 1E-9:
-				#print("time:", time, "volume", volume, "initial_time", initial_time, "initial_volume", initial_volume)
-				#print("Cell Divided: DeltaV=", volume - initial_volume, "threshold=", params[self.threshold_ind])
 				return 1
 			else:
 				return 0
@@ -359,8 +357,8 @@ cdef class DeltaVDivisionRule(DivisionRule):
 #returns 1 if equation(state, params, volume, time) > 0
 cdef class GeneralDivisionRule(DivisionRule):
 	cdef Term equation
-	cdef unsigned check_divide(self, double[:] state, double *params, double time, double volume, double initial_time, double intial_volume):
-		if (<Term> self.equation).volume_evaluate(<double*> state,params,volume,time) > 0:
+	cdef int check_divide(self, double* state, double *params, double time, double volume, double initial_time, double intial_volume):
+		if (<Term> self.equation).volume_evaluate(state,params,volume,time) > 0:
 			return 1
 		else:
 			return 0
@@ -379,7 +377,7 @@ cdef class GeneralDivisionRule(DivisionRule):
 
 #Death rules are checked at the beginning of each simulation loop to see if a cell should die
 cdef class DeathRule(LineageRule):
-	cdef unsigned check_dead(self, double[:] state, double *params, double time, double volume, double initial_time, double initial_volume):
+	cdef int check_dead(self, double* state, double *params, double time, double volume, double initial_time, double initial_volume):
 		raise NotImplementedError("check_dead must be implemented in DeathRule subclasses.")
 
 	def initialize(self, dict param_dictionary, dict species_indices, dict parameter_indices):
@@ -396,7 +394,7 @@ cdef class SpeciesDeathRule(DeathRule):
 	cdef unsigned threshold_noise_ind
 	cdef int comp
 	cdef double threshold
-	cdef unsigned check_dead(self, double[:] state, double *params, double time, double volume, double initial_time, double initial_volume):
+	cdef int check_dead(self, double* state, double *params, double time, double volume, double initial_time, double initial_volume):
 		self.threshold = params[self.threshold_ind]
 		if self.has_noise > 0:
 			self.threshold = self.threshold + normal_rv(0, params[self.threshold_noise_ind])
@@ -449,7 +447,7 @@ cdef class ParamDeathRule(DeathRule):
 	cdef int comp
 	cdef double threshold
 
-	cdef unsigned check_dead(self, double[:] state, double *params, double time, double volume, double initial_time, double initial_volume):
+	cdef int check_dead(self, double* state, double *params, double time, double volume, double initial_time, double initial_volume):
 		self.threshold = params[self.threshold_ind]
 		if self.has_noise > 0:
 			self.threshold = self.threshold + normal_rv(0, params[self.threshold_noise_ind])
@@ -496,8 +494,8 @@ cdef class ParamDeathRule(DeathRule):
 #A general death rule. Returns 1 if equation > 0. 0 otherwise
 cdef class GeneralDeathRule(DeathRule):
 	cdef Term equation
-	cdef unsigned check_dead(self, double[:] state, double *params, double time, double volume, double initial_time, double initial_volume):
-		if (<Term> self.equation).volume_evaluate(<double*>state,params,volume,time) > 0:
+	cdef int check_dead(self, double* state, double *params, double time, double volume, double initial_time, double initial_volume):
+		if (<Term> self.equation).volume_evaluate(state,params,volume,time) > 0:
 			return 1
 		else:
 			return 0
@@ -922,7 +920,6 @@ cdef class LineageModel(Model):
 			self._add_param(volume_param)
 			self.set_parameter(volume_param, volume_value)
 			self.create_reaction(reactants, products, propensity_type, propensity_param_dict, delay_type, delay_reactants, delay_products, delay_param_dict)
-			print("rule_equation", rule_equation)
 			self.create_rule("assignment", {"equation":rule_equation})
 
 
@@ -1021,45 +1018,50 @@ cdef class LineageCSimInterface(ModelCSimInterface):
 		self.c_death_events = M.get_c_death_events()
 		self.division_rule_volume_splitters, self.division_event_volume_splitters = M.py_get_volume_splitters()
 
+
 	#similar to compute_stochastic_volume_propensities but events are new included as well
-	cdef void compute_lineage_propensities(self, double[:] state, double *propensity_destination, double volume, double time):
+	cdef void compute_lineage_propensities(self, double[:] state, double[:] propensity_destination, double volume, double time):
+		cdef unsigned ind
 		for ind in range(self.num_reactions):
-			propensity_destination[ind] = (<Propensity> (self.c_propensities[0][ind])).get_stochastic_volume_propensity(<double*>state, self.c_param_values, volume, time)
+			propensity_destination[ind] = (<Propensity>(self.c_propensities[0][ind])).get_stochastic_volume_propensity(&state[0], self.c_param_values, volume, time)
+
 		for ind in range(self.num_lineage_propensities):
-			propensity_destination[self.num_reactions+ind] = (<Propensity> (self.c_lineage_propensities[0][ind])).get_stochastic_volume_propensity(<double*>state, self.c_param_values, volume, time)
+			propensity_destination[self.num_reactions+ind] = (<Propensity>(self.c_lineage_propensities[0][ind])).get_stochastic_volume_propensity(&state[0], self.c_param_values, volume, time)
 
 	#Applies all rules that change the volume of a cell
-	cdef double apply_volume_rules(self, double[:] state, double volume, double time, double dt):
+	cdef double apply_volume_rules(self, double* state, double volume, double time, double dt):
+		cdef int ind
 		for ind in range(self.num_volume_rules):
 			volume = (<VolumeRule>self.c_volume_rules[0][ind]).get_volume(state, self.c_param_values, volume, time, dt)
 		return volume
 
 	#Applies death rules in the order they were added to the model. Returns the index of the first death rule that returns True. -1 otherwise.
-	cdef int apply_death_rules(self, double[:] state, double volume, double time, double start_volume, double start_time):
-		cdef unsigned isdead = 0
+	cdef int apply_death_rules(self, double* state, double volume, double time, double start_volume, double start_time):
+		cdef int isdead = 0
+		cdef int ind
 		for ind in range(self.num_death_rules):
 			isdead = (<DeathRule>self.c_death_rules[0][ind]).check_dead(state, self.c_param_values, time, volume, start_time, start_volume)
 			if isdead > 0:
-				return <int>ind
+				return ind
 		return -1
 
 	#Applies divison rules in the order they were added to the model. Returns the index of the first division rule that returns True. -1 otherwise
-	cdef int apply_division_rules(self, double[:] state, double volume, double time, double start_volume, double start_time):
-		cdef unsigned divided = 0
+	cdef int apply_division_rules(self, double* state, double volume, double time, double start_volume, double start_time):
+		cdef int divided = 0
+		cdef int ind
 		for ind in range(self.num_division_rules):
 			divided = (<DivisionRule>self.c_division_rules[0][ind]).check_divide(state, self.c_param_values, time, volume, start_time, start_volume)
 			if divided > 0:
-				#print("cell divided with time=", time, "volume=", volume, "start_time=", start_time, "start_volume=", start_volume)
-				return <int>ind
+				return ind
 		return -1
 
 	#Applies a single volume event, determined by the index passed in
-	cdef double apply_volume_event(self, unsigned event_index, double[:] state, double current_time, double current_volume):
+	cdef double apply_volume_event(self, int event_index, double* state, double current_time, double current_volume):
 		current_volume = (<VolumeEvent>self.c_volume_events[0][event_index]).get_volume(state, self.c_param_values, current_volume, current_time)
 		return current_volume
 
 	#Divides a single cell using a VolumeSplitter determined by vsplit_index
-	cdef np.ndarray partition(self, unsigned vsplit_ind, LineageVolumeCellState parent):
+	cdef np.ndarray partition(self, int vsplit_ind, LineageVolumeCellState parent):
 		cdef VolumeSplitter vsplit
 		if vsplit_ind >= self.num_division_rules and vsplit_ind<self.num_division_rules+self.num_division_events:
 			vsplit_ind = vsplit_ind - self.num_division_rules
@@ -1074,6 +1076,9 @@ cdef class LineageCSimInterface(ModelCSimInterface):
 
 	cdef np.ndarray delay_partition(self, unsigned vsplit_ind, LineageVolumeCellState parent):
 		raise NotImplementedError("Implement me!")
+
+	cdef unsigned get_num_lineage_propensities(self):
+		return self.num_lineage_propensities
 
 	cdef unsigned get_num_division_events(self):
 		return self.num_division_events
@@ -1120,7 +1125,7 @@ cdef class LineageVolumeCellState(DelayVolumeCellState):
 
 	def py_set_state(self, state):
 		self.state_set = 1
-		return super().py_set_state(state)
+		return super().py_set_state(np.asarray(state))
 
 	cdef void set_initial_vars(self, double volume, double time):
 		self.initial_volume = volume
@@ -1241,7 +1246,7 @@ cdef class LineageVolumeSplitter(VolumeSplitter):
 			else:
 				raise ValueError("Custom partition function key, "+str(options["volume"])+", for "+s+" not in custom_partition_functions")
 
-	cdef np.ndarray partition(self, VolumeCellState parent):	   
+	cdef np.ndarray partition(self, VolumeCellState parent):
 		cdef double v0d, v0e, t0, p, q, c1, c2
 		# set times
 		t0 = parent.get_time()
@@ -1281,8 +1286,7 @@ cdef class LineageVolumeSplitter(VolumeSplitter):
 			q = v0e/parent.get_volume()
 			if v0d <= 0 or v0e <= 0:
 				raise ValueError("splitter "+self.ind2customsplitter[species_index]+" returned negative quantities for volume")
-
-
+ 
 		# take care of perfect splitting
 		for loop_index in range(self.perfect_indices.size()):
 			species_index = self.perfect_indices[loop_index]
@@ -1321,84 +1325,141 @@ cdef class LineageVolumeSplitter(VolumeSplitter):
 		cdef LineageVolumeCellState e = LineageVolumeCellState(v0 = v0e, t0 = parent.get_time(), state = estate)
 		ans[0] = d
 		ans[1] = e
-
 		return ans 
 
 cdef class LineageSSASimulator:
 
-	#cdef np.ndarray[np.double_t,ndim=1] c_timepoints
-	cdef double[:] c_timepoints
-	#cdef np.ndarray[np.double_t,ndim=1] c_current_state
-	cdef double[:] c_current_state
+	#Memory Views are reused between each individual cell
+	#Sometimes, to be compatable with the double* used in original bioscrape, these are cast to double*
+	#these are used by SimulateSingleCell
+	cdef double[:] c_timepoints, c_current_state, c_propensity, c_truncated_timepoints, c_volume_trace
+	cdef double[:, :] c_stoich, c_results
+	
+	#An Interface is stored ina  linear model for fast helper functions
+	cdef LineageCSimInterface interface
+
+	#All the counters are also reused for each individual cell and set when interface is set
+	cdef unsigned num_species, num_reactions, num_volume_events, num_death_events, num_division_events, num_volume_rules, num_death_rules, num_division_rules, num_propensities, num_timepoints
+
+	#These are used by SimulateLineage and PropogateCells
+	cdef Schnitz s, daughter_schnitz1, daughter_schnitz2
+	cdef LineageVolumeCellState d1, d2, d1final, d2final, cs, dcs
+	cdef SingleCellSSAResult r
+	cdef list old_schnitzes, old_cell_states
+	cdef Lineage lineage
+
+	#Used for PropogateCells
+	cdef list cell_states
+
+	#Used to create a propensity buffer from an interface
+	cdef create_propensity_buffer(self, LineageCSimInterface interface):
+		cdef np.ndarray[np.double_t, ndim = 1] c_propensity = np.zeros(interface.get_num_lineage_propensities()+interface.get_num_reactions())
+		return c_propensity
+
+	#Python accessible version
+	def py_create_propensity_buffer(self, LineageCSimInterface interface):
+		return self.create_propensity_buffer(interface)
+
+	#helper function to take an np.ndarrays and set them to internal memory views
+	cdef void set_c_truncated_timepoints(self, np.ndarray timepoints):
+		self.c_truncated_timepoints = timepoints
+	#python accessible version
+	def py_set_c_truncated_timepoints(self, np.ndarray timepoints):
+		self.set_c_truncated_timepoints(timepoints)
+
+	cdef void set_c_timepoints(self, np.ndarray timepoints):
+		self.c_timepoints = timepoints
+	#Python accessible version
+	def py_set_c_timepoints(self, np.ndarray timepoints):
+		self.set_c_timepoints(timepoints)
+
+	#Sets the internal interface and associated internal variables
+	#Main speed-up due to not having to set c_stoic (which could be very large) as often
+	cdef void intialize_single_cell_interface(self, LineageCSimInterface interface):
+		#Reset internal variables
+		self.interface = interface
+
+		#Memory View Setup
+		#Stochiomettric Matrix
+		self.c_stoich = self.interface.get_update_array() + self.interface.get_delay_update_array()
+		#Prepare propensity buffer of the right size
+		self.c_propensity = self.create_propensity_buffer(self.interface)
+
+		self.num_species = self.interface.get_number_of_species()
+		self.num_reactions = self.interface.get_number_of_species()
+
+		self.num_volume_events = self.interface.get_num_volume_events()
+		self.num_death_events = self.interface.get_num_death_events()
+		self.num_division_events = self.interface.get_num_division_events()
+		self.num_volume_rules = self.interface.get_num_volume_rules()
+		self.num_death_rules = self.interface.get_num_death_rules()
+		self.num_division_rules = self.interface.get_num_division_rules()
+		self.num_propensities = self.num_reactions + self.num_volume_events + self.num_death_events + self.num_division_events
+	#Python accessible version
+	def py_initialize_single_cell_interface(self, LineageCSimInterface interface):
+		self.initialize_single_cell_interface(interface)
 
 	#SSA for a single cell. Simulates until it devides or dies using division / death rules and/or reactions.
-	cdef SingleCellSSAResult SimulateSingleCell(self, LineageCSimInterface sim, LineageVolumeCellState v, np.ndarray timepoints):
-		self.c_timepoints = timepoints.copy()
-		
-		cdef np.ndarray[np.double_t,ndim=2] c_stoich = sim.get_update_array() + sim.get_delay_update_array()
-		
-		cdef unsigned num_species = c_stoich.shape[0]
+	#Before calling this for a given interface, must call initialize_single_cell_interface to set up internal variables
+	#Python wrapper below takes care of all the details, but will be slower if used repeatedly
+	cdef SingleCellSSAResult SimulateSingleCell(self, LineageVolumeCellState v, double[:] timepoints):
+		#print("SimulateSingleCell")
 
-		cdef unsigned num_reactions = c_stoich.shape[1]
-		cdef unsigned num_volume_events = sim.get_num_volume_events()
-		cdef unsigned num_death_events = sim.get_num_death_events()
-		cdef unsigned num_division_events = sim.get_num_division_events()
-		cdef unsigned num_volume_rules = sim.get_num_volume_rules()
-		cdef unsigned num_death_rules = sim.get_num_death_rules()
-		cdef unsigned num_division_rules = sim.get_num_division_rules()
-		cdef unsigned num_propensities = num_reactions + num_volume_events + num_death_events + num_division_events
+		#Memory views are reused from other objects for less allocation
 		cdef unsigned num_timepoints = len(timepoints)
 
 		cdef double initial_time = v.get_initial_time()
 		cdef double current_time = v.get_time()
-		cdef double final_time = self.c_timepoints[num_timepoints-1]
+		cdef double final_time = timepoints[num_timepoints-1]
 		cdef double proposed_time = 0.0
-		cdef double Lambda = 0.0
-		cdef np.ndarray[np.double_t,ndim=2] c_results = np.zeros((num_timepoints,num_species))
-		cdef np.ndarray[np.double_t,ndim=1] c_propensity = np.zeros(num_propensities)
-		cdef np.ndarray[np.double_t,ndim=1] c_volume_trace = np.zeros(num_timepoints,)
-
 		cdef unsigned current_index = 0
 		cdef unsigned reaction_choice = 4294967295 # https://en.wikipedia.org/wiki/4,294,967,295
 		cdef unsigned species_index = 4294967295
-
-		cdef double delta_t = self.c_timepoints[1]-self.c_timepoints[0]
-		cdef double next_queue_time = self.c_timepoints[current_index+1]
-		cdef unsigned move_to_queued_time = 0
-
-		initial_volume = v.get_initial_volume()
+		cdef double delta_t = timepoints[1]-timepoints[0]
+		cdef double next_queue_time = timepoints[current_index+1]
+		cdef double move_to_queued_time = 0
+		cdef double initial_volume = v.get_initial_volume()
 		cdef double current_volume = v.get_volume()
 		cdef int cell_divided = -1
 		cdef int cell_dead = -1
+		cdef double Lambda = 0
 
+		#Must initialize Memory Views
+		self.c_truncated_timepoints = timepoints
+
+		#These are kept as local numpy arrays because they are returned after every simulation
+		cdef np.ndarray[np.double_t,ndim=2] results = np.zeros((num_timepoints,self.num_species))
+		self.c_results = results
+		cdef np.ndarray[np.double_t,ndim=1] volume_trace = np.zeros(num_timepoints,)
+		self.c_volume_trace = volume_trace
 		cdef SingleCellSSAResult SCR
-		cdef VolumeCellState d1, d2
-		
 
 		#Set Initial State
 		if v.get_state_set() == 1:
 			self.c_current_state = v.py_get_state().copy()
 		else:
 			warnings.warn("No initial state set (via LineageVolumeCellState v) in SingleCellSSAResuslt. Defaulting to the Model's initial state.")
-			self.c_current_state = sim.get_initial_state().copy()
+			self.c_current_state = self.interface.get_initial_state().copy()
 			v.py_set_state(self.c_current_state)
 
-
 		#Warn user if delays are in the model (which will be converted to non-delay reactions)
-		if (sim.py_get_delay_update_array() != np.zeros(sim.py_get_delay_update_array().shape)).any():
-			warnings.warn("delay reactions found in the model. SingleCellSSASimulator will simulate these reactions without delay. To use delays, please use the SingleCellDelaySSASimulator.")
+		if (self.interface.py_get_delay_update_array() != np.zeros(self.interface.py_get_delay_update_array().shape)).any():
+			warnings.warn("Delay reactions found in the model. SingleCellSSASimulator will simulate these reactions without delay. Delays are not yet supported for LineageModels but can be simulated as regular Models with the DelayVolumeSSASimulator.")
 
 		# Do the SSA part now
+		#print("SingleCell loop start")
 		while current_index < num_timepoints:
+			
 			# Compute rules in place
-			sim.apply_repeated_volume_rules(<double*> self.c_current_state, current_volume, current_time)
+			self.interface.apply_repeated_volume_rules(&self.c_current_state[0], current_volume, current_time)
 
 			#returns the index of the first DeathRule that returned True and -1 otherwise
-			cell_dead = sim.apply_death_rules(self.c_current_state, current_volume, current_time, initial_volume, initial_time)
+			cell_dead = self.interface.apply_death_rules(&self.c_current_state[0], current_volume, current_time, initial_volume, initial_time)
+
 			#returns the index of the first DivisionRule that returned True and -1 otherwise
-			cell_divided = sim.apply_division_rules(self.c_current_state, current_volume, current_time, initial_volume, initial_time)
-			
-			#Break the loop if we are at a queued time
+			cell_divided = self.interface.apply_division_rules(&self.c_current_state[0], current_volume, current_time, initial_volume, initial_time)
+
+			#Break the loop cell dead or divided
 			if cell_dead >= 0 and cell_divided >= 0:
 				warnings.warn("Cell Death and Division Occured Simultaneously - Death Takes Precedent")
 				cell_divided = -1
@@ -1408,10 +1469,9 @@ cdef class LineageSSASimulator:
 			elif cell_divided >= 0:
 				break
 			#Compute Reaction and Event propensities in-place
-			sim.compute_lineage_propensities(self.c_current_state, <double*> (c_propensity.data), current_volume, current_time)
+			self.interface.compute_lineage_propensities(self.c_current_state, self.c_propensity, current_volume, current_time)
 
-			Lambda = cyrandom.array_sum(<double*> (c_propensity.data), num_propensities)
-			#print("propensities computed")
+			Lambda = cyrandom.array_sum(&self.c_propensity[0], self.num_propensities)
 			# Either we are going to move to the next queued time, or we move to the next reaction time.
 			
 			if Lambda == 0:
@@ -1427,76 +1487,76 @@ cdef class LineageSSASimulator:
 				move_to_queued_time = 0
 			v.set_time(current_time)
 
+
 			# Update the results array with the state for the time period that we just jumped through.
-			while current_index < num_timepoints and self.c_timepoints[current_index] <= current_time:
-				for species_index in range(num_species):
-					c_results[current_index,species_index] = self.c_current_state[species_index]
-				c_volume_trace[current_index] = current_volume
+			while current_index < num_timepoints and timepoints[current_index] <= current_time:
+				for species_index in range(self.num_species):
+					self.c_results[current_index, species_index] = self.c_current_state[species_index]
+				self.c_volume_trace[current_index] = current_volume
 				current_index += 1
 
 			# Now update the state accordingly.
 			# IF the queue won, then update the volume and continue on or stop if the cell divided.
 			if move_to_queued_time == 1:
 				# Update the volume every dtyp
-				current_volume = sim.apply_volume_rules(self.c_current_state, current_volume, current_time, delta_t)
+				current_volume = self.interface.apply_volume_rules(&self.c_current_state[0], current_volume, current_time, delta_t)
 				v.set_volume(current_volume)
 
 			# if an actual reaction happened, do the reaction and maybe update the queue as well.
 			else:
 				# select a reaction
-				#print("num_propensities", num_propensities, "c_propensity", c_propensity, "lambda", Lambda )
-				reaction_choice = cyrandom.sample_discrete(num_propensities, <double*> c_propensity.data, Lambda )
-
+				reaction_choice = cyrandom.sample_discrete(self.num_propensities, &self.c_propensity[0], Lambda )
 				#Propensities are Ordered:
 				# Reactions, Divison Events, Volume Events, Death Events
-				#print("rxn choince =", reaction_choice)
+
 				#Propensity is a reaction
-				if reaction_choice < num_reactions:
+				if reaction_choice < self.num_reactions:
 					# Do the reaction's initial stoichiometry.
-					for species_index in range(num_species):
-						self.c_current_state[species_index] += c_stoich[species_index,reaction_choice]
+					for species_index in range(self.num_species):
+						self.c_current_state[species_index] += self.c_stoich[species_index, reaction_choice]
 
 				#Propensity is a VolumeEvent
-				elif reaction_choice >= num_reactions and reaction_choice < num_reactions + num_volume_events:
-					current_volume = sim.apply_volume_event(reaction_choice - num_reactions, self.c_current_state, current_time, current_volume)
+				elif reaction_choice >= self.num_reactions and reaction_choice < self.num_reactions + self.num_volume_events:
+					current_volume = self.interface.apply_volume_event(reaction_choice - self.num_reactions, &self.c_current_state[0], current_time, current_volume)
 					v.set_volume(current_volume)
 				#Propensity is a DivisionEvent.
-				elif reaction_choice >= num_reactions+num_volume_events and reaction_choice < num_reactions + num_volume_events+num_division_events:
+				elif reaction_choice >= self.num_reactions+self.num_volume_events and reaction_choice < self.num_reactions + self.num_volume_events+self.num_division_events:
 					#Cell Divided = DivisionEvent Index + num_division_rules
-					cell_divided = reaction_choice - num_reactions - num_volume_events + num_division_rules
+					cell_divided = reaction_choice - self.num_reactions - self.num_volume_events + self.num_division_rules
 					break
 				#Propensity is a Death Event
-				elif reaction_choice >= num_reactions + num_volume_events+num_division_events:
+				elif reaction_choice >= self.num_reactions + self.num_volume_events+self.num_division_events:
 					#Cell Divided = DeathEvent Index + num_death_rules
-					cell_dead = reaction_choice - num_reactions + num_volume_events+num_division_events+num_death_rules
+					cell_dead = reaction_choice - self.num_reactions + self.num_volume_events+self.num_division_events+self.num_death_rules
 					break
 				else:
 					raise ValueError("More reaction propensities than expected!")
 
-
+		#print("Out of SingleCell loop")
 		if cell_divided>=0 or cell_dead>=0:
 			#Push current state to the nearest index
-			if current_time < self.c_timepoints[current_index]:
-				for species_index in range(num_species):
-					c_results[current_index,species_index] = self.c_current_state[species_index]
-				c_volume_trace[current_index] = current_volume
+			if current_time < self.c_truncated_timepoints[current_index]:
+				for species_index in range(self.num_species):
+					self.c_results[current_index,species_index] = self.c_current_state[species_index]
+				self.c_volume_trace[current_index] = current_volume
 				current_index += 1
-			self.c_timepoints = self.c_timepoints[:(current_index)]
-			c_volume_trace = c_volume_trace[:(current_index)]
-			c_results = c_results[:current_index,:]
 
+			
+			timepoints = timepoints[:current_index]
+			self.c_volume_trace = self.c_volume_trace[:current_index]
+			self.c_results = self.c_results[:current_index,:]
 
 		#vsr (SingleCellSSAResult) contains the simulation results until cell death / division or simualtion termination.
 		#cell_divided and cell_dead are returend via vsr so the events/rules/VolumeSplitters can be called by the lineage simualtion loop.
-
-		SCR = SingleCellSSAResult(self.c_timepoints,c_results,c_volume_trace, cell_divided >= 0)
+		SCR = SingleCellSSAResult(np.asarray(timepoints), np.asarray(self.c_results), np.asarray(self.c_volume_trace), cell_divided >= 0)
 		SCR.set_divided(cell_divided)
 		SCR.set_dead(cell_dead)
 		SCR.set_volume_object(v.get_volume_object())
-		
+		#("Single Cell Simulation Finished")
 		return SCR
 
 	def py_SimulateSingleCell(self, np.ndarray timepoints, LineageModel Model = None, LineageCSimInterface interface = None, LineageVolumeCellState v = None):
+
 		if Model == None and interface == None:
 			raise ValueError('py_SimulateSingleCell requires either a LineageModel Model or a LineageCSimInterface interface to be passed in as keyword parameters.')
 		elif interface == None:
@@ -1505,180 +1565,335 @@ cdef class LineageSSASimulator:
 		if v == None:
 			v = LineageVolumeCellState(v0 = 1, t0 = 0, state = Model.get_species_array())
 
+		self.py_set_c_truncated_timepoints(timepoints)
+		self.intialize_single_cell_interface(interface)
 
-		return self.SimulateSingleCell(interface, v, timepoints)
-
-def py_SimulateSingleCell(np.ndarray timepoints, LineageModel Model = None, LineageCSimInterface interface = None, LineageVolumeCellState v = None, return_dataframes = True):
-	simulator = LineageSSASimulator()
-	result = simulator.py_SimulateSingleCell(timepoints, Model = Model, interface = interface, v = v)
-
-	if return_dataframes:
-		return result.py_get_dataframe(Model = Model)
-	else:
-		return result
-
-cdef Lineage SimulateCellLineage(LineageCSimInterface sim, list initial_cell_states, np.ndarray timepoints, LineageSSASimulator simulator):
-	# Prepare a lineage structure to save the data output.
-	cdef Lineage l = Lineage()
-	cdef np.ndarray[np.double_t, ndim=1] c_timepoints = timepoints
-	cdef np.ndarray[np.double_t, ndim=1] c_truncated_timepoints
-	cdef double final_time = c_timepoints[c_timepoints.shape[0]-1]
-
-	cdef unsigned i
-	cdef unsigned list_index = 0
-	cdef unsigned debug_index
-	cdef list old_schnitzes = []
-	cdef list old_cell_states = []
-
-	cdef SingleCellSSAResult r
-	cdef Schnitz s
-	cdef LineageVolumeCellState cs
-	cdef LineageVolumeCellState dcs
-	cdef Schnitz daughter_schnitz1, daughter_schnitz2
-	cdef LineageVolumeCellState d1, d2, d1final, d2final
-	cdef np.ndarray daughter_cells
-
-	# Simulate the first cell until death division or max time
-	for i in range(len(initial_cell_states)):
-		r = simulator.SimulateSingleCell(sim, initial_cell_states[i], c_timepoints)
-		s = r.get_schnitz()
-		s.set_parent(None)
-		l.add_schnitz(s)
-		old_schnitzes.append(s)
-		old_cell_states.append(r.get_final_cell_state())
-
-	#print('Entering Simulatin Queue')
-	while list_index < len(old_cell_states):
-		cs = old_cell_states[list_index]
-		s = old_schnitzes[list_index]
-		list_index += 1
-
-		#If the cell has already simulated all its time, do nothing
-		if cs.get_time() >= final_time- 1E-9:
-			pass
-		#If the cell is dead, do nothing
-		elif cs.get_dead() >= 0:
-			pass
-		#If the cell has divided, apply the appropriate division rule
-		elif cs.get_divided() >= 0:
-			daughter_cells = sim.partition(cs.get_divided(), cs)
-			
-			d1 = <LineageVolumeCellState>(daughter_cells[0])
-			d2 = <LineageVolumeCellState>(daughter_cells[1])
-
-			#Create a new timepoint array and simulate the first daughter and queue if it doesn't reach final time.
-			c_truncated_timepoints = c_timepoints[c_timepoints >= cs.get_time()]
-			r = simulator.SimulateSingleCell(sim, d1, c_truncated_timepoints)
-			daughter_schnitz1 = r.get_schnitz()
-			d1final = r.get_final_cell_state()
-
-			# Add on the new daughter if final time wasn't reached.
-			if d1final.get_time() < final_time + 1E-9:
-				old_schnitzes.append(daughter_schnitz1)
-				old_cell_states.append(d1final)
-			else:
-				warnings.warn("Daughter cell simulation went over the total time. Simulation has been discarded. Check for model errors.")
-
-			r = simulator.SimulateSingleCell(sim, d2, c_truncated_timepoints)
-			daughter_schnitz2 = r.get_schnitz()
-			d2final = r.get_final_cell_state()
-
-			if d2final.get_time() < final_time + 1E-9:
-				old_schnitzes.append(daughter_schnitz2)
-				old_cell_states.append(d2final)
-			else:
-				warnings.warn("Daughter cell simulation went over the total time. Simulation has been discarded. Check for model errors.")
-
-			# Set up daughters and parent appropriately.
-			daughter_schnitz1.set_parent(s)
-			daughter_schnitz2.set_parent(s)
-			s.set_daughters(daughter_schnitz1,daughter_schnitz2)
-
-			# Add daughters to the lineage
-			l.add_schnitz(daughter_schnitz1)
-			l.add_schnitz(daughter_schnitz2)
-
-	return l
-
-def py_SimulateCellLineage(timepoints, initial_cell_states = [], initial_cell_count = 1, LineageCSimInterface interface = None, LineageModel Model = None, LineageSSASimulator simulator = None):
-	if Model == None and interface == None:
-		raise ValueError('py_SimulateCellLineage requires either a LineageModel Model or a LineageCSimInterface interface to be passed in as keyword parameters.')
-	elif interface == None:
-		interface = LineageCSimInterface(Model)
-		interface.py_set_initial_time(timepoints[0])
-	if len(initial_cell_states) == 0:
-		initial_cell_states = [LineageVolumeCellState(v0 = 1, t0 = 0) for i in range(initial_cell_count)]
-	if simulator == None:
-		simulator = LineageSSASimulator()
-
-	return SimulateCellLineage(interface, initial_cell_states, timepoints, simulator)
-
-#Simulates an ensemble of cells over some amount of time.
-#Returns the final cell-states of all cells (and their offspring).
-#  dead cells are included based upon the include_dead_cells parameter (1 = included, otherwise = excluded)
-cdef list PropagateCells(LineageCSimInterface sim, list initial_cell_states, np.ndarray timepoints, unsigned include_dead_cells, LineageSSASimulator simulator):
-	cdef np.ndarray c_timepoints = timepoints
-	cdef np.ndarray c_truncated_timepoints
-	cdef np.ndarray index_list
-	cdef list final_cell_states = []
-	cdef double final_time = c_timepoints[timepoints.shape[0]-1]
-	cdef unsigned list_index = 0
-	cdef list old_cell_states = []
-	cdef LineageVolumeCellState cs
+		return self.SimulateSingleCell(v, self.c_truncated_timepoints)
 
 
-	for i in range(len(initial_cell_states)):
-		cs = simulator.SimulateSingleCell(sim, initial_cell_states[i], c_timepoints).get_final_cell_state()
-		old_cell_states.append(cs)
 
-	while list_index < len(old_cell_states):
+	#Functions to simulate linages of cells
+	#returns a truncated version of the memoryview array[x:]
+	#starting at the first index x such that array[x] >= value
+	cdef double[:] truncate_timepoints_less_than(self, double[:] array, double value):
+		cdef unsigned j = 0
+		for j in range(array.shape[0]):
+			if array[j] >= value:
+				return array[j:]
+		return None
+
+	#Functions to simulate linages of cells
+	#returns a truncated version of the memoryview array[:x]
+	#starting at the first index x such that array[x] > value
+	cdef double[:] truncate_timepoints_greater_than(self, double[:] array, double value):
+		cdef unsigned j = 0
+		for j in range(array.shape[0]):
+			if array[j] > value:
+				break
+
+		return array[:j]
+
+	#Starts the simulation
+	#add_to_lineage toggled for lineage versus propogation simulation
+	cdef void simulate_cell_list(self, list initial_cell_states, double[:] timepoints, unsigned add_to_lineage, unsigned create_schnitzes):
+		#print("simulate_cell_list")
+		cdef unsigned i = 0
+
+		for i in range(len(initial_cell_states)):
+			self.r = self.SimulateSingleCell(initial_cell_states[i], timepoints)
+			self.old_cell_states.append(self.r.get_final_cell_state())
+
+			if create_schnitzes or add_to_lineage:
+				self.s = self.r.get_schnitz()
+				self.s.set_parent(None)
+
+				if create_schnitzes:
+					self.old_schnitzes.append(self.s)
+
+				if add_to_lineage:
+					self.lineage.add_schnitz(self.s)
+				
+				
+
+	#Simulate inside the Simulation Queue, 1 cell at a time
+	#add_to_lineage toggled for lineage versus propogation simulation
+	cdef void simulate_daughter_cells(self, double[:] timepoints, unsigned add_to_lineage, unsigned create_schnitzes):
+		#print("simulate_daughter_cells")
+		cdef double final_time = timepoints[len(timepoints)-1]
+
+		self.r = self.SimulateSingleCell(self.d1, timepoints)
+		self.d1final = self.r.get_final_cell_state()
+
+		if add_to_lineage or create_schnitzes:
+			self.daughter_schnitz1 = self.r.get_schnitz()
+
+		# Add on the new daughter if final time wasn't reached.
+		if self.d1final.get_time() < final_time + 1E-9:
+			self.old_cell_states.append(self.d1final)
+
+			if create_schnitzes:
+				self.old_schnitzes.append(self.daughter_schnitz1)
+		else:
+			warnings.warn("Daughter cell simulation went over the total time. Simulation has been discarded. Check for model errors.")
+
+		self.r = self.SimulateSingleCell(self.d2, timepoints)
+		self.d2final = self.r.get_final_cell_state()
 		
-		cs = old_cell_states[list_index]
-		list_index += 1
+		if add_to_lineage or create_schnitzes:
+			self.daughter_schnitz2 = self.r.get_schnitz()
+
+		if self.d2final.get_time() < final_time + 1E-9:
+			self.old_cell_states.append(self.d2final)
+
+			if create_schnitzes:
+				self.old_schnitzes.append(self.daughter_schnitz2)
+		else:
+			warnings.warn("Daughter cell simulation went over the total time. Simulation has been discarded. Check for model errors.")
+
+		if add_to_lineage or create_schnitzes:
+			# Set up daughters and parent appropriately.
+			self.daughter_schnitz1.set_parent(self.s)
+			self.daughter_schnitz2.set_parent(self.s)
+			self.s.set_daughters(self.daughter_schnitz1,self.daughter_schnitz2)
+
+			if add_to_lineage:
+				# Add daughters to the lineage
+				self.lineage.add_schnitz(self.daughter_schnitz1)
+				self.lineage.add_schnitz(self.daughter_schnitz2)
 
 
-		#If the cell has already simulated all its time, do nothing
-		if cs.get_time() >= final_time - final_time*1E-10:
-			final_cell_states.append(cs)
-		#If the cell is dead, do nothing
-		elif cs.get_dead() >= 0:
-			if include_dead_cells == 1:
-				final_cell_states.append(cs)
-		#If the cell has divided, apply the appropriate division rule
-		elif cs.get_divided() >= 0:
-			daughter_cells = sim.partition(cs.get_divided(), cs)
-			
-			d1 = <LineageVolumeCellState>(daughter_cells[0])
-			d2 = <LineageVolumeCellState>(daughter_cells[1])
+	#Simulates a lineage of cells keeptring track of mother-daughter relations
+	cdef Lineage SimulateCellLineage(self, list initial_cell_states, double[:] timepoints):
+		cdef unsigned i, j, list_index
+		cdef int cell_divided, cell_dead
+		cdef double final_time
 
-			#Create a new timepoint array and simulate the first daughter and queue if it doesn't reach final time.
-			c_truncated_timepoints = c_timepoints[c_timepoints >= cs.get_time()]
-			d1final = simulator.SimulateSingleCell(sim, d1, c_truncated_timepoints).get_final_cell_state()
-
-			# Add on the new daughter if final time wasn't reached.
-			old_cell_states.append(d1final)
-			d2final = simulator.SimulateSingleCell(sim, d2, c_truncated_timepoints).get_final_cell_state()
-
-			old_cell_states.append(d2final)
-
-	return final_cell_states
+		#Check instantation of core data structures
+		#Note: these are not automatically instantiated here so they can be reused in more complex simulation types
+		if self.lineage is None:
+			raise RuntimeError("LineageSSASimulator.lineage must be instantiated to a Lineage before calling SimulateCellLineage. py_SimulateCellLineage automatically does this for you but is slower.")
+		if self.old_cell_states is None:
+			raise RuntimeError("LineageSSASimulator.old_cell_states must be instantiated to a list before calling SimulateCellLineage. py_SimulateCellLineage automatically does this for you but is slower.")
+		if self.old_schnitzes is None:
+			raise RuntimeError("LineageSSASimulator.old_schnitzes must be instantiated to a list before calling SimulateCellLineage. py_SimulateCellLineage automatically does this for you but is slower.")
 
 
-def  py_PropagateCells(timepoints, initial_cell_states = [], LineageModel Model = None, LineageCSimInterface interface = None, LineageSSASimulator simulator = None, include_dead_cells = False, return_dataframes = True):
+		#These will be used to store outputs
+		cdef np.ndarray daughter_cells
 
+		#initialize variables
+		final_time = timepoints[timepoints.shape[0]-1]
+		i = 0
+		list_index = 0
+		cell_divided = -1
+		cell_dead = -1
+
+		# Simulate the first cell until death division or max time
+		
+		self.simulate_cell_list(initial_cell_states, timepoints, 1, 1) #toggle add_to_lineage = 1 create snitches 1
+
+		while list_index < len(self.old_cell_states):
+			self.cs = self.old_cell_states[list_index]
+			self.s = self.old_schnitzes[list_index]
+
+			list_index += 1
+
+			#If the cell has already simulated all its time, do nothing
+			if self.cs.get_time() >= final_time- 1E-9:
+				pass
+			#If the cell is dead, do nothing
+			elif self.cs.get_dead() >= 0:
+				pass
+			#If the cell has divided, apply the appropriate division rule
+			elif self.cs.get_divided() >= 0:
+
+				#Check if dt is too small for accurate lineage simulation
+				if self.cs.get_initial_time() == self.cs.get_time():
+					raise ValueError("Cells are dividing too faster for the timepoints passed into SimulateCellLineage. Try decreasing the spacing between timepoints or limiting cell growth.")
+
+				daughter_cells = self.interface.partition(self.cs.get_divided(), self.cs)
+
+				self.d1 = <LineageVolumeCellState>(daughter_cells[0])
+				self.d2 = <LineageVolumeCellState>(daughter_cells[1])
+
+				#Create a new timepoint array and simulate the first daughter and queue if it doesn't reach final time.
+				#self.c_truncated_timepoints = timepoints[timepoints >= self.cs.get_time()]
+				self.c_truncated_timepoints = self.truncate_timepoints_less_than(timepoints, self.cs.get_time())
+				self.simulate_daughter_cells(self.c_truncated_timepoints, 1, 1) #toggle add_to_lineage = 1 and add_schnitz = 1
+
+		return self.lineage
+
+	#Python wrapper of the above
+	def py_SimulateCellLineage(self, np.ndarray timepoints, initial_cell_states, LineageCSimInterface interface):
+		#Instantiate variables
+		self.lineage = Lineage()
+		self.old_cell_states = []
+		self.old_schnitzes = []
+		self.set_c_timepoints(timepoints)
+		self.intialize_single_cell_interface(interface)
+		return self.SimulateCellLineage(initial_cell_states, self.c_timepoints)
+
+
+	#Simulates an ensemble of cells over some amount of time.
+	#Returns the final cell-states of all cells (and their offspring).
+	#  dead cells are included based upon the include_dead_cells parameter (1 = included, otherwise = excluded)
+	cdef list PropagateCells(self, list initial_cell_states, double[:] timepoints, unsigned include_dead_cells):
+		cdef unsigned list_index
+
+		if self.old_cell_states is None:
+			raise RuntimeError("LineageSSASimulator.old_cell_states must be instantiated to a list before calling PropagateCells. py_SimulateCellLineage automatically does this for you but is slower.")
+		if self.cell_states is None:
+			raise RuntimeError("LineageSSASimulator.cell_states must be instantiated to a list before calling PropagateCells. py_SimulateCellLineage automatically does this for you but is slower.")
+		
+
+		cdef double final_time = timepoints[timepoints.shape[0]-1]
+		list_index = 0
+
+		#Simulate the initial cells
+		self.simulate_cell_list(initial_cell_states, timepoints, 0, 0) #Toggle add to lineage 0 create schnitzes 0
+
+		#Enter Simulation Queue
+		while list_index < len(self.old_cell_states):
+			self.cs = self.old_cell_states[list_index]
+			list_index += 1
+
+
+			#If the cell is dead, do not simulate. Save if include_dead_cells toggled
+			if self.cs.get_dead() >= 0 and include_dead_cells == 1:
+				self.cell_states.append(self.cs)
+
+			#If the cell has already simulated all its time, do not simulate and save
+			elif self.cs.get_time() >= final_time - final_time*1E-10:
+				self.cell_states.append(self.cs)
+
+			#If the cell has divided, apply the appropriate division rule
+			elif self.cs.get_divided() >= 0:
+				daughter_cells = self.interface.partition(self.cs.get_divided(), self.cs)
+				
+				self.d1 = <LineageVolumeCellState>(daughter_cells[0])
+				self.d2 = <LineageVolumeCellState>(daughter_cells[1])
+
+				#Create a new timepoint array and simulate the first daughter and queue if it doesn't reach final time.
+				self.c_truncated_timepoints = self.truncate_timepoints_less_than(timepoints, self.cs.get_time())
+				self.simulate_daughter_cells(self.c_truncated_timepoints, 0, 0) #toggle add_to_lineage = 0 create_schnitzes = 0
+
+		return self.cell_states
+	#Python wrapper of the above
+	def py_PropagateCells(self, np.ndarray timepoints, list initial_cell_states, LineageCSimInterface interface, unsigned include_dead_cells):
+		self.cell_states = []
+		self.old_cell_states = []
+		self.set_c_timepoints(timepoints)
+		self.intialize_single_cell_interface(interface)
+		return self.PropagateCells(initial_cell_states, timepoints, include_dead_cells)
+
+
+	#Propogates a single cell trajectory, ignoring half the daughters every division.
+	cdef list SingleCellLineage(self, LineageVolumeCellState initial_cell, double[:] timepoints):
+		cdef double final_time = timepoints[timepoints.shape[0]-1]
+		cdef unsigned list_index = 0
+		cdef unsigned i
+
+		self.cell_states = []
+		self.old_cell_states = []
+		
+		#These will be used to store outputs
+		cdef np.ndarray daughter_cells
+
+
+		self.r = self.SimulateSingleCell(initial_cell, timepoints)
+		self.old_cell_states.append(self.r.get_final_cell_state())
+		self.cell_states.append(self.r)
+
+		while list_index < len(self.old_cell_states):
+			self.cs = self.old_cell_states[list_index]
+			list_index += 1
+
+			#If the cell has already simulated all its time, do nothing
+			if self.cs.get_time() >= final_time- 1E-9:
+				pass
+			#If the cell is dead, return the list of cells
+			elif self.cs.get_dead() >= 0:
+				return self.cell_states
+			#If the cell has divided, apply the appropriate division rule
+			elif self.cs.get_divided() >= 0:
+				daughter_cells = self.interface.partition(self.cs.get_divided(), self.cs)
+
+				#Create a new timepoint array and simulate a random daughter and queue if it doesn't reach final time.
+				i = <unsigned>cyrandom.uniform_rv()>.5
+				self.d1 = <LineageVolumeCellState>(daughter_cells[i])
+				self.c_truncated_timepoints = self.truncate_timepoints_less_than(timepoints, self.cs.get_time())
+				self.r = self.SimulateSingleCell(self.d1, self.c_truncated_timepoints)
+				self.cell_states.append(self.r)
+				self.d1final = self.r.get_final_cell_state()
+
+				# Add on the new daughter if final time wasn't reached.
+				if self.d1final.get_time() < final_time + 1E-9:
+					self.old_cell_states.append(self.d1final)
+				else:
+					warnings.warn("Daughter cell simulation went over the total time. Simulation has been discarded. Check for model errors.")
+
+		return self.cell_states
+	#Python wrapper of the above
+	def py_SingleCellLineage(self, np.ndarray timepoints, LineageVolumeCellState initial_cell, LineageCSimInterface interface):
+		self.set_c_timepoints(timepoints)
+		self.intialize_single_cell_interface(interface)
+		return self.SingleCellLineage(initial_cell, timepoints)
+
+	
+#Auxilary wrapper functions for quick access to Lineage Simulations
+
+#SingleCellLineage simulates the trajectory of a single cell, randomly discarding one of its daughters every division.
+def py_SingleCellLineage(timepoints, initial_cell_state = None, LineageModel Model = None, LineageCSimInterface interface = None, LineageSSASimulator simulator = None, return_dataframes = True):
 	if Model == None and interface == None:
 		raise ValueError('py_PropagateCells requires either a LineageModel Model or a LineageCSimInterface interface to be passed in as keyword parameters.')
 	elif interface == None:
 		interface = LineageCSimInterface(Model)
 		interface.py_set_initial_time(timepoints[0])
-	if len(initial_cell_states) == 0:
-		initial_cell_states = [LineageVolumeCellState(v0 = 1, t0 = 0, state = Model.get_species_array())]
+
+	if initial_cell_state is None:
+		initial_cell_state = LineageVolumeCellState(v0 = 1, t0 = 0, state = interface.py_get_initial_state())
+	elif not isinstance(initial_cell_state, LineageVolumeCellState):
+		raise ValueError("initial_cell_state must be of type LineageVolumeCellState or None (in which case it will default to the Model's initial state).")
+
 	if simulator == None:
 		simulator = LineageSSASimulator()
 
-	final_cell_states = PropagateCells(interface, initial_cell_states, timepoints, include_dead_cells, simulator)
+	result = simulator.py_SingleCellLineage(timepoints, initial_cell_state, interface)
+
+	cell_lineage = []
+	if return_dataframes:#Converts list of cell states into a Pandas dataframe
+		try:
+			import pandas
+			df_list = [r.py_get_dataframe(Model = Model) for r in result]
+			return pandas.concat(df_list)
+		except ModuleNotFoundError:
+			warnings.warn("return_dataframes=True requires that pandas be installed. Instead a numpy array is being returned (each column is a species, the last column is volume, and rows are cell states)")
+	else:
+		return result
+
+#py_PropagateCells simulates an ensemble of growing dividing cells, returning only the cell states at the end of timepoints
+#include_dead_cells toggles whether all dead cells accumulated along the way will also be returned.
+#return data_frames returns all the results as a pandas dataframe. Otherwise results are returned as a list of LineageVolumeCellStates
+def  py_PropagateCells(timepoints, initial_cell_states = [], LineageModel Model = None, LineageCSimInterface interface = None, LineageSSASimulator simulator = None, include_dead_cells = False, return_dataframes = True):
 	
-	if return_dataframes:
+	if Model == None and interface == None:
+		raise ValueError('py_PropagateCells requires either a LineageModel Model or a LineageCSimInterface interface to be passed in as keyword parameters.')
+	elif interface == None:
+		interface = LineageCSimInterface(Model)
+		interface.py_set_initial_time(timepoints[0])
+
+	if isinstance(initial_cell_states, int):
+		initial_cell_states = [LineageVolumeCellState(v0 = 1, t0 = 0, state = interface.py_get_initial_state())]*initial_cell_states
+	elif (isinstance(initial_cell_states, list) and len(initial_cell_states) == 0):
+		initial_cell_states = [LineageVolumeCellState(v0 = 1, t0 = 0, state = interface.py_get_initial_state())]
+	elif not isinstance(initial_cell_states, list):
+		raise ValueError("Initial Cell States must be a list of LineageVolumeCell states or and positive integer")
+	if simulator == None:
+		simulator = LineageSSASimulator()
+
+	final_cell_states = simulator.py_PropagateCells(timepoints, initial_cell_states, interface, include_dead_cells)
+
+	if return_dataframes:#Converts list of cell states into a Pandas dataframe
 		try:
 			import pandas
 			darray = np.array([np.append(cs.py_get_state(), cs.py_get_volume()) for cs in final_cell_states])
@@ -1691,77 +1906,485 @@ def  py_PropagateCells(timepoints, initial_cell_states = [], LineageModel Model 
 			return df
 		except ModuleNotFoundError:
 			warnings.warn("return_dataframes=True requires that pandas be installed. Instead a numpy array is being returned (each column is a species, the last column is volume, and rows are cell states)")
-
-		
 	else:
 		return final_cell_states
 
-#Propogates a single cell trajectory, ignoring half the daughters every division.
-cdef list SingleCellLineage(LineageCSimInterface sim, LineageVolumeCellState initial_cell, np.ndarray timepoints, LineageSSASimulator simulator):
-	cdef np.ndarray c_timepoints = timepoints
-	cdef np.ndarray c_truncated_timepoints
-	cdef np.ndarray index_list
-	cdef list old_cell_states = []
-	cdef list single_cell_trajectory = []
-	cdef double final_time = c_timepoints[timepoints.shape[0]-1]
-	cdef unsigned list_index = 0
-	cdef unsigned ind
-	cdef SingleCellSSAResult r
-	cdef LineageVolumeCellState cs
+#SimulateCellLineage simulates a lineage of growing, dividing, and dieing cells over timepoints. 
+#The entire time trajectory of the simulation is returned as a Lineage which contains a binary tree of Schnitzes each containing a LineageSingleCellSSAResult.
+def py_SimulateCellLineage(timepoints, initial_cell_states = [], initial_cell_count = 1, interface = None, Model = None):
 
-
-	r = simulator.SimulateSingleCell(sim,  initial_cell, c_timepoints)
-	old_cell_states.append(r.get_final_cell_state())
-	single_cell_trajectory.append(r)
-
-	while list_index < len(old_cell_states):
-		cs = old_cell_states[list_index]
-		list_index += 1
-
-		#If the cell has already simulated all its time, do nothing
-		if cs.get_time() >= final_time- 1E-9:
-			pass
-		#If the cell is dead, do nothing
-		elif cs.get_dead() >= 0:
-			pass
-		#If the cell has divided, apply the appropriate division rule
-		elif cs.get_divided() >= 0:
-			daughter_cells = sim.partition(cs.get_divided(), cs)
-
-			#Create a new timepoint array and simulate a random daughter and queue if it doesn't reach final time.
-			ind = <unsigned>cyrandom.uniform_rv()>.5
-			d = <LineageVolumeCellState>(daughter_cells[ind])
-			c_truncated_timepoints = c_timepoints[c_timepoints >= cs.get_time()]
-			r = simulator.SimulateSingleCell(sim, d, c_truncated_timepoints)
-			single_cell_trajectory.append(r)
-			dfinal = r.get_final_cell_state()
-
-			# Add on the new daughter if final time wasn't reached.
-			if dfinal.get_time() < final_time + 1E-9:
-				old_cell_states.append(dfinal)
-				single_cell_trajectory.append(r)
-			else:
-				warnings.warn("Daughter cell simulation went over the total time. Simulation has been discarded. Check for model errors.")
-	return single_cell_trajectory
-
-def py_SingleCellLineage(np.ndarray timepoints, LineageVolumeCellState initial_cell = None,LineageModel Model = None, LineageCSimInterface interface = None, LineageSSASimulator simulator = None, return_dataframes = True):
+	simulator = LineageSSASimulator()
 	if Model == None and interface == None:
-		raise ValueError('py_SingleCellPropogation requires either a LineageModel Model or a LineageCSimInterface interface to be passed in as keyword parameters.')
+		raise ValueError('py_SimulateCellLineage requires either a LineageModel Model or a LineageCSimInterface interface to be passed in as keyword parameters.')
 	elif interface == None:
 		interface = LineageCSimInterface(Model)
 		interface.py_set_initial_time(timepoints[0])
-	if initial_cell == None:
-		initial_cell = LineageVolumeCellState(v0 = 1, t0 = 0, state = Model.get_species_array())
-	if simulator == None:
-		simulator = LineageSSASimulator()
 
-	single_cell_trajectory = SingleCellLineage(interface, initial_cell, timepoints, simulator)
+	if isinstance(initial_cell_states, int):
+		initial_cell_states = [LineageVolumeCellState(v0 = 1, t0 = 0, state = interface.py_get_initial_state())]*initial_cell_states
+	elif (isinstance(initial_cell_states, list) and len(initial_cell_states) == 0):
+		initial_cell_states = [LineageVolumeCellState(v0 = 1, t0 = 0, state = interface.py_get_initial_state())]
+	elif not isinstance(initial_cell_states, list):
+		raise ValueError("Initial Cell States must be a list of LineageVolumeCell states or and positive integer")
+
+	return simulator.py_SimulateCellLineage(timepoints, interface = interface, initial_cell_states = initial_cell_states)
+
+
+#SimulateSingleCell performs an SSA simulation on a single cell until it divides, dies, or the final timepoint arrives.
+def py_SimulateSingleCell(timepoints, Model = None, interface = None, initial_cell_state = None, return_dataframes = True):
+	simulator = LineageSSASimulator()
+	if Model == None and interface == None:
+		raise ValueError('py_SimulateSingleCell requires either a LineageModel Model or a LineageCSimInterface interface to be passed in as keyword parameters.')
+	elif interface == None:
+		interface = LineageCSimInterface(Model)
+		interface.py_set_initial_time(timepoints[0])
+
+	if initial_cell_state == None:
+		v = LineageVolumeCellState(v0 = 1, t0 = 0, state = interface.py_get_initial_state())
+	
+	result = simulator.py_SimulateSingleCell(timepoints, Model = Model, interface = interface, v = v)
 
 	if return_dataframes:
-		df_trajectory = [r.py_get_dataframe(Model = Model) for r in single_cell_trajectory]
-		return df_trajectory
+		return result.py_get_dataframe(Model = Model)
 	else:
-		return single_cell_trajectory
+		return result
+
+
+#A simulator class for interacting cell lineages
+cdef class InteractingLineageSSASimulator(LineageSSASimulator):
+
+	#Used for Simulating Interacting lineages
+	cdef int spec_ind,
+	cdef unsigned num_global_species, num_interfaces, total_cell_count
+	cdef double[:] global_species, c_period_timepoints
+	cdef int[:, :] global_species_inds #stores global_species_inds[i, j] --> species index of interface j for global species i
+
+	cdef double total_cell_volume, global_volume, leftover_global_volume, temp_volume, global_volume_param, average_dist_threshold, global_sync_period, dt
+
+	cdef list interface_list, new_schnitzes, new_cell_states, lineage_list, old_cell_state_list, new_cell_state_list, old_schnitz_list, new_schnitz_list
+	cdef SingleCellSSAResult new_r, merge_r
+	cdef LineageVolumeCellState new_cs
+	cdef Schnitz new_s
+
+
+	#Initializes a new interface and sets all internal variables such as lineage and cell_lists appropriately
+	cdef void switch_interface(self, unsigned interface_ind):
+		#print("switch_interface", interface_ind)
+		self.intialize_single_cell_interface(self.interface_list[interface_ind])
+		self.lineage = self.lineage_list[interface_ind]
+		self.old_cell_states = self.old_cell_state_list[interface_ind]
+		self.new_cell_states = self.new_cell_state_list[interface_ind]
+		self.old_schnitzes = self.old_schnitz_list[interface_ind]
+		self.new_schnitzes = self.new_schnitz_list[interface_ind]
+
+	#Calculates volume variables from the entire population of cells
+	cdef void calculate_global_volumes(self):
+		#print("calculate_global_volumes")
+		cdef unsigned interface_ind = 0
+		cdef unsigned i = 0
+		self.total_cell_count = 0
+		self.total_cell_volume = 0 #reset total cell volume
+
+		for interface_ind in range(self.num_interfaces):
+
+			self.old_cell_states = self.old_cell_state_list[interface_ind]
+
+			for i in range(len(self.old_cell_states)):
+				self.cs = self.old_cell_states[i]
+				self.total_cell_volume += self.cs.get_volume()
+				self.total_cell_count += 1
+
+		if self.global_volume_param == 0: #If global volume is 0, assume global_volume = total_cell_volume for the entire simulation
+			self.leftover_global_volume = 0
+			self.global_volume = self.total_cell_volume
+		elif self.total_cell_volume > self.global_volume_param:
+			warnings.warn("Total cell volume exceeded global volume. All cells set to dead and simulation terminated.")
+			#Set all cells to dead
+			#Death by crowding
+			for interface_ind in range(self.num_interfaces):
+				self.old_cell_states = self.old_cell_state_list[interface_ind]
+				for i in range(len(self.old_cell_states)):
+					self.cs = self.old_cell_states[i]
+					self.cs.set_dead(1)
+		else:
+			self.global_volume = self.global_volume_param
+			self.leftover_global_volume = self.global_volume - self.total_cell_volume
+
+	
+	#Calculates the total number of global species across cell states
+	cdef void calculate_global_species_totals(self):
+		#print("calculate_global_species_totals")
+		cdef unsigned interface_ind = 0
+		cdef unsigned list_index = 0
+		cdef unsigned i = 0
+		cdef int spec_ind = 0
+
+		#Cycle through all the cell_states by interface
+		for interface_ind in range(self.num_interfaces):
+			self.old_cell_states = self.old_cell_state_list[interface_ind]
+			#cycle through each cell
+			for list_index in range(len(self.old_cell_states)):
+				self.cs = self.old_cell_states[list_index]
+				self.c_current_state = self.cs.get_state()
+				#Add the global species if they are in the model
+				for i in range(self.num_global_species):
+					spec_ind = self.global_species_inds[i, interface_ind]
+					if spec_ind >= 0: #If the cell contains the global species, set its internal s_i to 0 and add that to the global total
+						self.global_species[i] += self.c_current_state[spec_ind]
+						self.cs.set_state_comp(0, spec_ind)
+
+	#Synchronizes global species by redistributing them between different volumes, including the global volume
+	cdef void synchronize_global_species(self):
+		#print("synchronize_global_species")
+		cdef unsigned i = 0
+
+		#Calculate the global volumes
+		self.calculate_global_volumes()
+		#Calculate the global species totals
+		self.calculate_global_species_totals()
+
+		for i in range(self.num_global_species):
+			#If the amount of a global species is above the threshold for stochastic distribute, distribute the average
+			if self.total_cell_volume/self.global_volume*self.global_species[i]/self.total_cell_count > self.average_dist_threshold:
+				self.global_species[i] = self.distribute_global_species_average(self.global_species[i])
+
+			#Otherwise distribute stochastically
+			else:
+				self.global_species[i] = self.distribute_global_species_multinomial(self.global_species[i])
+
+	#Distribute global species to their expected values	
+	#global_species is the number of species to distribue between all old_cell_states
+	#will distribute these species and return the number of species left in the global volume
+	cdef double distribute_global_species_average(self, double global_count):
+		#print("distribute_global_species_average")
+		cdef unsigned i = 0
+		cdef unsigned temp_count = 0
+		cdef double new_global_species = global_count  #stores the number of global species passed to the global volume
+		cdef unsigned list_index = 0
+		cdef unsigned interface_ind = 0
+		cdef int spec_ind = 0
+				
+		for interface_ind in range(self.num_interfaces):
+			self.old_cell_states = self.old_cell_state_list[interface_ind]
+			for list_index in range(len(self.old_cell_states)):
+				self.cs = self.old_cell_states[list_index]
+				temp_count = int(self.cs.get_volume()/self.global_volume*global_count)
+
+				spec_ind = self.global_species_inds[i, interface_ind]
+				#Add the global species if they are in the model
+				if spec_ind >= 0: #Check if the cell contains that species
+					new_global_species -= temp_count
+					self.cs.set_state_comp(temp_count, spec_ind)
+
+		return new_global_species
+	
+	#Distribute global species stochastically	
+	#global_count is the number of species to distribue between all old_cell_states
+	#will distribute these species and return the number of species left in the global volume
+	cdef double distribute_global_species_multinomial(self, double global_count):
+		#print("distribute_global_species_multinomial")
+		cdef unsigned i = 0
+		cdef double rand
+		cdef double temp_volume = 0
+		cdef double new_global_species = 0  #stores the number of global species passed to the global volume
+		cdef unsigned list_index = 0
+		cdef unsigned interface_ind = 0
+		cdef int spec_ind = 0
+
+		while global_count > 0:
+			rand = cyrandom.uniform_rv()
+			temp_volume = self.leftover_global_volume
+			#randomly add to the global volume first because it is more probable
+			if rand <= temp_volume/self.global_volume:
+				new_global_species += 1
+				global_count -= 1
+				continue
+
+			#cycle through cells
+			for interface_ind in range(self.num_interfaces):
+				self.old_cell_states = self.old_cell_state_list[interface_ind]
+				for list_index in range(len(self.old_cell_states)):
+					self.cs = self.old_cell_states[list_index]
+					temp_volume += self.cs.get_volume()
+					if rand <= temp_volume/self.global_volume:
+						spec_ind = self.global_species_inds[i, interface_ind]
+						if spec_ind >= 0: #Check if the cell contains that species
+							self.c_current_state = self.cs.get_state()
+							self.cs.set_state_comp(self.c_current_state[spec_ind]+1, spec_ind) #add one to the cell state
+							global_count -= 1 #decrement the global species
+						else: #if the cell doesn't contain the species, add it to the new global species vector
+							new_global_species += 1
+							global_count -= 1
+						break
+
+		return new_global_species
+	
+	#Helper function to simulate one sync-period of an interacting lineage
+	cdef void SimulateInteractingLineagePeriod(self, double[:] timepoints):
+		#print("SimulateInteractingLineagePeriod")
+		cdef np.ndarray daughter_cells
+		cdef unsigned interface_ind = 0
+		cdef unsigned list_index = 0
+		cdef double final_time = timepoints[timepoints.shape[0]-1]
+		#Cycle through interfaces
+		for interface_ind in range(self.num_interfaces):
+			self.switch_interface(interface_ind)#set the correct interface and internal variables
+
+			#cycle through cells
+			#print("entering while loop")
+			while list_index < len(self.old_cell_states): 
+				self.cs = self.old_cell_states[list_index]
+				self.s = self.old_schnitzes[list_index]
+				list_index += 1
+
+				#If the cell is dead add it to the lineage
+				if self.cs.get_dead() >= 0:
+					# Add daughters to the lineage
+					self.lineage.add_schnitz(self.s)
+
+				#If the cell has divided right at teh end of the period, add it to the next period for division
+				#Do not add to lineage because that will happen next period
+				elif self.cs.get_divided() >= 0 and self.cs.get_time() >= final_time - 1E-9:
+					self.new_cell_states.append(self.cs)
+					self.new_schnitzes.append(self.s)
+
+				#If a cell has divided and still has time left in the period, simulate the daughters.
+				elif self.cs.get_divided() >= 0:
+					self.lineage.add_schnitz(self.s)
+					daughter_cells = self.interface.partition(self.cs.get_divided(), self.cs)
+					self.d1 = <LineageVolumeCellState>(daughter_cells[0])
+					self.d2 = <LineageVolumeCellState>(daughter_cells[1])
+					self.c_truncated_timepoints = self.truncate_timepoints_less_than(timepoints, self.cs.get_time())
+					self.simulate_daughter_cells(self.c_truncated_timepoints, 0, 1) #Toggle add to lineage False and create schnitzes True
+
+				#If the cell has reached its period time, add it to new_schnitzes and cell_states
+				elif self.cs.get_time() >= final_time - 1E-9:
+					self.new_schnitzes.append(self.s)
+					self.new_cell_states.append(self.cs)
+
+				#If the cell isn't dead or divided or at period time simulate it more
+				else:
+					#If there is only one timepoint left, push to the next period.
+					self.c_truncated_timepoints = self.truncate_timepoints_less_than(timepoints, self.cs.get_time())
+				
+					if len(self.c_truncated_timepoints) <= 2:
+						#print("only one timepoint left, push by deltaT")
+						self.new_schnitzes.append(self.s)
+						self.new_cell_states.append(self.cs)
+
+					else:
+						self.new_r = self.SimulateSingleCell(self.cs, self.c_truncated_timepoints)
+						self.new_cs = self.new_r.get_final_cell_state()
+						self.new_cs.set_initial_vars(self.cs.get_initial_volume(), self.cs.get_initial_time())
+						self.new_cs.set_time(self.cs.get_time())
+						self.new_cs.set_volume(self.cs.get_volume())
+
+						#After simulation, merge the two SSA results
+						self.merge_r = SingleCellSSAResult(np.concatenate((self.s.get_time(), self.new_r.get_timepoints())), 
+							np.concatenate((self.s.get_data(), self.new_r.get_result())), 
+							np.concatenate((self.s.get_volume(), self.new_r.get_volume())), 
+							self.new_r.get_divided() >= 0)
+
+						
+
+						self.merge_r.set_divided(self.new_r.get_divided())
+						self.merge_r.set_dead(self.new_r.get_dead())
+						self.new_s = self.merge_r.get_schnitz()
+						self.new_s.set_parent(self.s.get_parent())
+
+						
+						#Add schnitzes to the next period if they are done simulating
+						if self.new_cs.get_time() >= final_time - 1E-9:
+							self.new_schnitzes.append(self.new_s)
+							self.new_cell_states.append(self.new_cs)
+						#stay in the same period (perhaps they have died or divided)
+						else:
+							self.old_schnitzes.append(self.new_s)
+							self.old_cell_states.append(self.new_cs)
+
+
+			#After going through all the old_cell_states, make new_cell_states old.
+
+			self.old_cell_state_list[interface_ind] = self.new_cell_states
+			self.old_schnitz_list[interface_ind] = self.new_schnitzes
+			self.new_cell_state_list[interface_ind] = []
+			self.new_schnitz_list[interface_ind] = []
+			#print("End of Period Loope")
+
+			
+
+	cdef list SimulateInteractingCellLineage(self, list interface_list, list initial_cell_states, double[:] timepoints, double global_sync_period, np.ndarray global_species_inds, double global_volume_param, double average_dist_threshold):
+		#print("Starting Interacting Lineage Simulation")
+
+		cdef unsigned i = 0
+		cdef unsigned j = 0
+		cdef unsigned spec_ind = 0
+		cdef unsigned list_index = 0
+		cdef unsigned interface_ind = 0
+		
+		cdef double final_time = timepoints[timepoints.shape[0]-1] #when the entire simulation ends (adding dt onto the end for rounding reasons)
+		cdef double current_time = timepoints[0] #current time
+		
+		self.dt = timepoints[1] - timepoints[0]
+		self.global_sync_period = global_sync_period #How often global species are synchronized
+		cdef double period_time = timepoints[0]+self.global_sync_period #When the next sync period happens
+
+		#Store seperate cell lists and lineages for each interface
+		self.lineage_list = [] #stores one lineage for each interface
+		self.old_cell_state_list = [] #stores one list of cell states for each interface
+		self.new_cell_state_list = [] #stores one list of new cell states for each interface
+		self.old_schnitz_list = [] #stores one list of schnitzes for each interface
+		self.new_schnitz_list = []
+
+		self.global_species_inds = global_species_inds #stores global_species_inds[i, j] --> species index of interface j for global species i
+
+		#These parameters are global because they are used by helper functions
+		self.total_cell_volume = 0 #stores sum_i volume(cell_i)
+		self.num_global_species = global_species_inds.shape[0]
+		self.global_species = np.zeros(self.num_global_species) #stores the global species vector
+		self.leftover_global_volume = 0 #stores global_volume - total_cell_volume
+		self.global_volume = 0 #stores global_volume_param OR total_cell_volume if global_volume_param == 0.
+		self.global_volume_param = global_volume_param
+		self.average_dist_threshold = average_dist_threshold
+
+		
+
+		#Check that len sims == len initial_cells. As cells divide, they inherit their mother's CSimInterface
+		#Now done in python wrappers
+		#if len(self.interface_list) != len(initial_cell_states):
+		#	raise ValueError(f"interface list (length {len(self.interface_list)}) [a list of LineageCSimInterfaces] must be the same length as initial cells (length {len(initial_cell_states)}) [[a list of LineageVolumeCellStates] for each interface].")
+		#Check that global period is greater than dt
+		if self.global_sync_period < self.dt:
+			raise ValueError("global sync period must be larger than the timestep, dt, in the timepoints passed in for simulation.")
+		#Check global sync period is smaller than the total time simulated
+		if self.global_sync_period >= final_time:
+			raise ValueError("global sync period must be smaller than the entire length of the timepoints passed in for simulation.")
+		
+		#Calculate global volume
+		self.calculate_global_volumes()
+
+		self.interface_list = interface_list
+		self.num_interfaces = len(self.interface_list)
+		for interface_ind in range(self.num_interfaces):
+			self.lineage_list.append(Lineage())
+			self.new_cell_state_list.append([])
+			self.old_cell_state_list.append([])
+			self.old_schnitz_list.append([])
+			self.new_schnitz_list.append([])
+
+		#Timepoints for the first set of simulations
+		self.c_period_timepoints = self.truncate_timepoints_greater_than(timepoints, period_time)
+
+		#Simulate the initial cell states
+		#All cells simulated till either they die, divide or they hit period time
+		#Cell states placed in self.old_cell_state_list[interface_ind] organized by interface_ind
+		for interface_ind in range(self.num_interfaces):
+			self.switch_interface(interface_ind) #Very important to call this before the simulation
+			self.simulate_cell_list(initial_cell_states[interface_ind], self.c_period_timepoints, 0, 1) #toggle add_to_lineage = 0 create_schnitzes = 1
+
+		#Main Simulation loop
+		#print("Entering Main loop")
+		while period_time <= final_time and current_time <= final_time:
+			#Update timepoints
+			current_time = period_time
+
+		
+			#Do nothing and the loop will end
+			if period_time > final_time:
+				pass
+			#If the total sim time isn't a multiple of the period time, update carefully
+			elif period_time + self.global_sync_period >= final_time and period_time < final_time:
+				period_time = final_time+self.dt
+			#Otherwise update normally
+			elif period_time + self.global_sync_period < final_time+self.dt:
+				period_time = period_time + self.global_sync_period
+
+			self.c_period_timepoints = self.truncate_timepoints_greater_than(timepoints, period_time)
+
+			#Calculate global volume and synchronize global species across all cells in self.old_cell_state_list
+			self.synchronize_global_species() #calculates global values and redistributes the species
+			self.SimulateInteractingLineagePeriod(self.c_period_timepoints)
+
+			self.new_schnitz_list = []
+			self.new_cell_state_list = []
+			for interface_ind in range(self.num_interfaces):
+				self.new_schnitz_list.append([])
+				self.new_cell_state_list.append([])
+
+		#Add the final schnitzes to their lineages
+		for interface_ind in range(self.num_interfaces):
+			self.switch_interface(interface_ind)
+			for list_index in range(len(self.old_schnitzes)): 
+				self.s = self.old_schnitzes[list_index]
+				self.lineage.add_schnitz(self.s)
+
+		return self.lineage_list
+
+	#Python accessor
+	def py_SimulateInteractingCellLineage(self, np.ndarray timepoints, list interface_list, list initial_cell_states, double global_sync_period, np.ndarray global_species_inds, double global_volume_param, double average_dist_threshold):
+		self.set_c_timepoints(timepoints)
+		#print("py_SimulateInteractingCellLineage 2: timepoints.shape",timepoints.shape, timepoints[0], timepoints[timepoints.shape[0]-1]) 
+		return self.SimulateInteractingCellLineage(interface_list, initial_cell_states, timepoints, global_sync_period, global_species_inds, global_volume_param, average_dist_threshold)
+
+
+#Auxilary Python Function
+def py_SimulateInteractingCellLineage(timepoints, global_sync_period, global_species = [], interface_list = [], model_list = [], initial_cell_states = [], simulator = None, global_species_inds = None, global_volume = 0, average_dist_threshold = 1.0):
+	if simulator == None:
+		simulator = InteractingLineageSSASimulator()
+	
+	if len(model_list) == 0 and len(interface_list) == 0:
+		raise ValueError("Missing Required Keyword Arguments:models = [LineageModel] or interface_list = [LineageCSimInterface]")
+	elif len(interface_list) == 0:
+		interface_list = [LineageCSimInterface(m) for m in model_list]
+		global_species_inds = np.zeros((len(global_species), len(model_list)))
+		for i in range(len(global_species)):
+			for j in range(len(model_list)):
+				m = model_list[j]
+				s = global_species[i]
+				ind = m.get_species_index(s)
+				if ind != None:
+					global_species_inds[i, j] = ind
+				else:
+					global_species_inds[i, j] = -1
+	elif len(model_list) != 0 and len(interface_list) != 0:
+		raise ValueError("Must call py_SimulateInteractingCellLineage with either the keyword argument model_list or the keyword argument interface_list, not both.")
+	elif len(model_list) == 0 and (global_species_inds == None or global_species_inds.shape[1] != len(interface_list)):
+		raise ValueError("When calling py_SimulateInteractingCellLineage with the keyword argument interface_list, the argument global_species_inds is required where global_species_inds[i, j] corresponds the species index of the ith global species in the jth interface.")
+	elif len(global_species) == 0 and global_species_inds == None:
+		warnings.warn('Calling SimulateInteractintCellLineage without any global species defined. Use the global_species or global_species_inds keywords.')
+		global_species_inds = np.array()
+
+
+	if len(initial_cell_states) == len(interface_list) and  isinstance(initial_cell_states[0], int):
+		initial_cell_counts = initial_cell_states
+		initial_cell_states = []
+
+		for i in range(len(interface_list)):
+			initial_cell_states.append([])
+			interface = interface_list[i]
+			initial_state = interface.py_get_initial_state()
+			for j in range(initial_cell_counts[i]):
+				lvcs = LineageVolumeCellState(v0 = 1.0, t0 = timepoints[0], state = initial_state.copy())
+				initial_cell_states[i].append(lvcs)
+
+	elif len(initial_cell_states) == 0 and len(interface_list) > 0:
+		warnings.warn("Calling py_SimulateInteractintCellLineage without any initial_cell_states. Defaulting to creating one initial cell for each interface.")
+		initial_cell_states = [LineageVolumeCellState(v0 = 1, t0 = 0, state = i.py_get_initial_state()) for i in interface_list]
+
+	elif len(initial_cell_states) > len(interface_list):
+		raise ValueError("When passing in more initial_cell_states than models, the keyword argument interface_inds is also required where interface_inds[i] corresponds to the index of the interface/model beloning to initial_cell_state[i].")
+	
+	return simulator.py_SimulateInteractingCellLineage(timepoints, interface_list, initial_cell_states, global_sync_period, global_species_inds.astype(int), global_volume, average_dist_threshold)
+
+
+
+		
+
+		
+
+
+
+
 
 
 #Inputs:
@@ -1775,237 +2398,25 @@ def py_SingleCellLineage(np.ndarray timepoints, LineageVolumeCellState initial_c
 #       High values >> 1 can dramatically slow down the simulation. Low values < 1 might result in no distribution of global species.
 # Returns a Lineage
 
-"""How it works: TODO
 
-
-	"""
-
+"""
 cdef Lineage SimulateInteractingCellLineage(list sim_interfaces, list initial_cell_states, list interface_inds, np.ndarray timepoints, LineageSSASimulator simulator, 
 	double global_sync_period, np.ndarray global_species_inds, double global_volume_param, double average_dist_threshold):
 	
-	# Prepare a lineage structure to save the data output.
-	cdef Lineage l = Lineage() #stores the final output lineages
-	cdef np.ndarray[np.double_t, ndim=1] c_timepoints = timepoints #stores all timepoints
-	cdef np.ndarray[np.double_t, ndim=1] c_period_timepoints #stores the time points for the given sim period
-	cdef np.ndarray[np.double_t, ndim=1] c_truncated_timepoints #stores a truncated set of timepoints
-	cdef double dt = c_timepoints[1] - c_timepoints[0]
-	cdef double final_time = c_timepoints[c_timepoints.shape[0]-1] #when the entire simulation ends (adding dt onto the end for rounding reasons)
-	cdef double period_time = c_timepoints[0]+global_sync_period
-	cdef double current_time = c_timepoints[0]
-	cdef LineageCSimInterface sim #Stores the LineageCSimInterface passed into SimulateCellLineage between interaction syncs
-	cdef unsigned i = 0
-	cdef unsigned j = 0
-	cdef int spec_ind = 0
-	cdef unsigned list_index = 0
-
-	#Used to keep track of and sync global species
-	cdef double total_cell_volume = 0 #stores sum_i volume(cell_i)
-	cdef unsigned num_global_species = global_species_inds.shape[0]
-	cdef np.ndarray[np.double_t, ndim=1] global_species = np.zeros(num_global_species)
-	cdef int new_global_species = 0
-	cdef double leftover_global_volume #stores global_volume - total_cell_volume
-	cdef double global_volume = 0 #stores global_volume_param OR total_cell_volume if global_volume_param == 0.
-	cdef double temp_volume = 0 #stores a volume for calculating partitioning probabilities
-	cdef unsigned temp_count = 0 #stores a temporary count for partitioning
-	cdef double rand = 0 #for doubles
-
-	#Used for lineage simulation
-	cdef list old_interface_inds = [] #stores the index of the interface for each simulation
-	cdef list new_interface_inds = [] #stores the index of the interface for the next round of simulation
-	cdef list old_schnitzes = [] #stores schnitzes that have been added to the lineage
-	cdef list new_schnitzes = [] #stores schnitzes for merging in the next round of simulation
-	cdef list old_cell_states = [] #stores cell states which have been simulated
-	cdef list new_cell_states = [] #stores cell states to begin the next round of simulation
-	cdef SingleCellSSAResult r, new_r, merge_r
-	cdef Schnitz s, new_s, daughter_schnitz1, daughter_schnitz2
-	cdef LineageVolumeCellState cs, new_cs, d1, d2, d1final, d2final
-	cdef np.ndarray daughter_cells
-	cdef np.ndarray state
-
-	#Check that len sims == len initial_cells. As cells divide, they inherit their mother's CSimInterface
-	if len(interface_inds) != len(initial_cell_states):
-		raise ValueError("sims [a list of LineageCSimInterfaces] must be the same length as initial cells [a list of LineageVolumeCellStates].")
-	if max(interface_inds) >= len(sim_interfaces):
-		raise ValueError("interface_inds index too large. Must contain valid to the sims (LineagesCSimInterface list) argument.")
-
-	#Check that global period is greater than dt
-	if global_sync_period < dt:
-		raise ValueError("global sync period must be larger than the timestep, dt, in the timepoints passed in for simulation.")
 	
-	#Set global and total volumes
-	total_cell_volume = 0
-	for i in range(len(initial_cell_states)):
-		cs = initial_cell_states[i]
-		total_cell_volume += cs.get_volume()
 
-	if global_volume_param == 0: #If global volume is 0, assume global_volume = total_cell_volume for the entire simulation
-		leftover_global_volume = 0
-		global_volume = total_cell_volume
-	elif  total_cell_volume > global_volume_param:
-		raise ValueError(f"global volume {global_volume_param} must be greater than or equal to the total cell volume {total_cell_volume}.")
-	else:
-		global_volume = global_volume_param
-		leftover_global_volume = global_volume - total_cell_volume
 
 	# Simulate the initial cells until death division or synch-time
-	#print('Simulating Initial Cells from', current_time, "to", period_time)
-	c_period_timepoints = c_timepoints[c_timepoints < period_time]
-	#print("c_period_timepoints:", c_period_timepoints[0], c_period_timepoints[len(c_period_timepoints)-1])
-	#print("next timepoint:", c_timepoints[len(c_period_timepoints)])
+
 
 	total_cell_volume = 0 #reset total cell volume after simulation
-	for list_index in range(len(initial_cell_states)):
-		#print("simulating cell", list_index)
-		i = interface_inds[list_index]
-		sim = sim_interfaces[i]
-		r = simulator.SimulateSingleCell(sim, initial_cell_states[list_index], c_period_timepoints)
-		s = r.get_schnitz()
-		s.set_parent(None)
-		cs = r.get_final_cell_state()
+	
 
-		if cs.get_time() < c_timepoints[len(c_period_timepoints)] and cs.get_time() >= c_timepoints[len(c_period_timepoints)-1]:
-			#print("cell requires next period")
-			new_schnitzes.append(s)
-			new_cell_states.append(cs)
-			new_interface_inds.append(i)
-		else:
-			#print("cell requires a continuation simulation: cs.get_time()=", cs.get_time(), "period_time=", period_time)
-			old_schnitzes.append(s)
-			old_cell_states.append(cs)
-			old_interface_inds.append(i)
 
-	if global_volume_param == 0:
-		global_volume = total_cell_volume
 
 	#Global Simulation Loop till final_time
 	#print("Entering Queue Loop")
-	while period_time <= final_time + dt and current_time <= final_time:
-		#print("simulating from", current_time, "to", period_time)
-		c_period_timepoints = c_timepoints[c_timepoints < period_time]
-		current_time = period_time
-		#Update the period time
-		
-		#Do nothing and the loop will end
-		if period_time > final_time:
-			pass
-		#If the total sim time isn't a multiple of the period time, update carefully
-		elif period_time + global_sync_period >= final_time+dt and period_time < final_time:
-			period_time = final_time+dt
-		#Otherwise update normally
-		elif period_time + global_sync_period < final_time+dt:
-			period_time = period_time + global_sync_period
-
-		#print("Period time set to", period_time)
-		
-		
-		#print("****Synchronizing Global Species!*****")
-		#Method: 
-		#Given: N global species S_i, M cells with volume v_j
-		#Case 1:
-		#if each cell gets 1 or more of the species, on average: average v_j/global_volume of each global species S_i goes to cell i. 
-		#Rounding errors will occur. Excess species will be distributed via case-2.
-		# NOTE: at some point, this could be changed to some kind of hypergeometric sampling but I don't know how to code that efficiently.
-		#Case 2:
-		#if each cell gets: cycle through j, giving v_j a copy of S_i with probability v_j / global_volume until all S_i are distributed. Include Global CRN in this.
-		# NOTE: this is exact, but would be very inefficient for large M and S_i
-		
-		#reset total_cell_volume and add up all global species
-		total_cell_volume = 0
-		for list_index in range(len(old_cell_states)):
-			cs = old_cell_states[list_index]
-			j = old_interface_inds[list_index]
-			state = cs.get_state()
-			total_cell_volume += cs.get_volume()
-
-			for i in range(num_global_species):
-				spec_ind = global_species_inds[i, j]
-				if spec_ind >= 0: #If the cell contains the global species, set its internal s_i to 0 and add that to the global total
-					global_species[i] += state[spec_ind]
-					cs.set_state_comp(0, spec_ind)
-
-		if global_volume_param == 0: #If global volume is 0, assume global_volume = total_cell_volume for the entire simulation
-			leftover_global_volume = 0
-			global_volume = total_cell_volume
-
-		elif  total_cell_volume > global_volume:
-			warnings.warn("Total cell volume exceeded global volume. All cells set to dead and simulation terminated.")
-
-			#Set all cells to dead
-			#Death by crowding
-			for i in range(len(old_cell_states)):
-				cs = old_cell_states[i]
-				cs.set_dead(1)
-		else:
-			leftover_global_volume = global_volume - total_cell_volume
-
-		print("Distributing Global Species")
-		for i in range(num_global_species):
-			print("i", i)
-			new_global_species = -1 #Toggle to -1 to reuse case 2 if statement
-
-			#Case 1: total_cell_volume/global_volume*S_i >= average_dist_threshold
-			#Mean-values of species distributed 
-			if total_cell_volume/global_volume*global_species[i] > average_dist_threshold:
-				new_global_species = int(global_species[i])
-				print("Case 1", "new_global_species", new_global_species)
-				for list_index in range(len(old_cell_states)):
-						j = old_interface_inds[list_index]
-						spec_ind = global_species_inds[i, j]
-
-						if spec_ind >= 0: #Check if the cell contains that species
-							cs = old_cell_states[list_index]
-							temp_volume = cs.get_volume()
-							temp_count = int(temp_volume/global_volume*global_species[i])
-							j = old_interface_inds[list_index]
-							spec_ind = global_species_inds[i, j]
-							new_global_species -= temp_count
-							cs.set_state_comp(temp_count, spec_ind)
-							print("Cell ", list_index, "gets", temp_count)
-
-				global_species[i] = new_global_species
-				print("End:", "global_species =", new_global_species)
-
-			#Case 2: Distribute stochastically
-			#  total_cell_volume/global_volume*S_i >= average_dist_threshold
-			#     LHS is the expected number of molecules in cells.
-			#     RHS is a user set threshold
-			# OR
-			#  (global_volume_param == 0 and new_global_species > 0)
-			#      meaning some species are leftover from the average distribution (due to rounding) which cannot be placed in the global volume.
-			
-			if (total_cell_volume/(global_volume*global_species[i]*len(old_cell_states)) <= average_dist_threshold and new_global_species == -1) or (global_volume_param == 0 and new_global_species > 0):
-				new_global_species = 0
-				print("Case 2")
-				while global_species[i] > 0:
-					rand = cyrandom.uniform_rv()
-					temp_volume = leftover_global_volume
-					#randomly add to the global volume first because it is more probable
-					if rand < temp_volume/global_volume:
-						new_global_species += 1
-						global_species[i] -= 1
-						continue
-
-					#cycle through cells
-					for list_index in range(len(old_cell_states)):
-						cs = old_cell_states[list_index]
-						temp_volume += cs.get_volume()
-						if rand < temp_volume/global_volume:
-							j = old_interface_inds[list_index]
-							spec_ind = global_species_inds[i, j]
-							if spec_ind >= 0: #Check if the cell contains that species
-								state = cs.get_state()
-								cs.set_state_comp(state[spec_ind]+1, spec_ind) #add one to the cell state
-								global_species[i] -= 1 #decrement the global species
-								print("Cell ", list_index, "gets", 1)
-							else: #if the cell doesn't contain the species, add it to the new global species vector
-								new_global_species += 1
-								global_species[i] -= 1
-							break
-
-				print("End:", "global_species =", new_global_species)
-				global_species[i] = new_global_species
-
-
+	
 		#print("final global_speices = ", global_species)
 		#enter simulation queue
 		list_index = 0
@@ -2204,3 +2615,4 @@ def py_SimulateInteractingCellLineage(timepoints, global_sync_period, global_spe
 	
 	return SimulateInteractingCellLineage(sim_interfaces, initial_cell_states, interface_inds, timepoints,simulator, global_sync_period, global_species_inds, global_volume, average_dist_threshold)
 
+"""
