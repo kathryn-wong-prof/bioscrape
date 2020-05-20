@@ -865,6 +865,7 @@ cdef Lineage simulate_cell_lineage(CSimInterface sim, Volume v, np.ndarray timep
 
 def py_simulate_cell_lineage(CSimInterface sim, Volume v, np.ndarray timepoints,
                                    VolumeSimulator vsim, VolumeSplitter vsplit):
+    warnings.warn("py_simulate_cell_lineage is depricated. Consider using the more advanced Bioscrape Lineage Package.")
     return simulate_cell_lineage(sim,v,timepoints,vsim,vsplit)
 
 

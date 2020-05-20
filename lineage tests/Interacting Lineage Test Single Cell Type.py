@@ -6,62 +6,66 @@ from bioscrape.lineage import py_SimulateCellLineage
 from bioscrape.lineage import py_SimulateSingleCell
 from bioscrape.lineage import LineageCSimInterface
 from bioscrape.lineage import py_PropagateCells
-from bioscrape.lineage import py_SingleCellLineage
+from bioscrape.lineage import py_SingleCellLineage, py_PropagateInteractingCells
 import time as pytime
 
-k1 = 3.333
-k2 = 33.33
-K = 20.2020
-g = .01010101
-d = 2.020202
-
+k1 = 1.1111
+kgrow = 33.33
+Kgrow = 20.2020
+kdeath = 6.06
+Kdeath = 5.5050
+g = .020202
+d = 80.808
 species = ["S", "X"]
 rxn1 = [[], ["S"], "massaction", {"k":k1}]
-rxn2 = [["S", "X"], ["X"], "massaction", {"k":d}]
+rxn2 = [["S"], [], "massaction", {"k":d}]
 rxns = [rxn1, rxn2]
 x0 = {"S": 0, "X":100}
 
 #Instantiate Model
 print("Instantiating Model")
 M = LineageModel(species = species, reactions = rxns, initial_condition_dict = x0)
-
 vsplit = LineageVolumeSplitter(M)
-
+#M.create_division_event("division", {}, "massaction", {"k":.1, "species":"S"}, vsplit)
 M.create_division_rule("deltaV", {"threshold":1.0}, vsplit)
+#M.create_death_event("death", {}, "hillpositive", {"k":kdeath, "s1":"S", "n":2, "K":Kdeath})
 M.create_volume_event("linear volume", {"growth_rate":g}, 
-	"hillnegative", {"k":k2, "s1":"S", "n":2, "K":K})
+	"hillnegative", {"k":kgrow, "s1":"S", "n":2, "K":Kgrow})
 M.py_initialize()
 
 
-global_sync_period = 2.0
+global_sync_period = .5
 N = 1
 sum_list = []
 #lineage = 
 
 lineage = None
-cell_states = None
+cell_state_samples = None
 single_cell_states = None
-
-for i in range(1, 16):
-	maxtime = i*10
-	print("maxtime", maxtime, "i", i)
-	timepoints = np.arange(0, maxtime, .05)
-
+result = None
+lineage_list = None
+cell_state_sample_list = None
+for i in range(1, 4):
+	maxtime = i*5
+	dt = 0.01
+	timepoints = np.arange(0, maxtime+dt, dt)
 	print("Beginning Simulation", i, "for", maxtime)
 	#interface = LineageCSimInterface(M)
 	
 	s = pytime.clock()
 	#lineage = py_SimulateCellLineage(timepoints, Model = M, initial_cell_states = N)
-	#cell_states = py_PropagateCells(timepoints, Model = M, initial_cell_states = N)
+	#cell_state_samples, sample_times = py_PropagateCells(timepoints, Model = M, initial_cell_states = N, sample_times = 10)
 	#single_cell_states = py_SingleCellLineage(timepoints, Model = M)
-	lineage_list = py_SimulateInteractingCellLineage(timepoints, global_sync_period, model_list = [M],initial_cell_states = [N], global_species = ["S"], global_volume = 1000, average_dist_threshold = 10.0)
-	lineage = lineage_list[0]
-	#result = py_SimulateSingleCell(timepoints[10:], Model = M)	
+	#lineage_list, global_species = py_SimulateInteractingCellLineage(timepoints, global_sync_period, model_list = [M],initial_cell_states = [N], global_species = ["S"], global_volume = 100, average_dist_threshold = 10.0)
+	#cell_state_sample_list, global_species, sample_times = py_PropagateInteractingCells(timepoints, global_sync_period, sample_times = 5, model_list = [M],initial_cell_states = [N], global_species = ["S"], global_volume = 0, average_dist_threshold = 10.0)
+	#result = py_SimulateSingleCell(timepoints[10:], Model = M)
 
 	e = pytime.clock()
 	print("Simulation", i, "complete in", e-s, "s")
 
-	if i > 0:
+	if i > 1:
+		if lineage_list is not None:
+			lineage = lineage_list[0]
 		if lineage is not None:
 			print("Building Tree")
 			sch_tree = [[]]
@@ -82,10 +86,13 @@ for i in range(1, 16):
 			print("counts", counts)
 			sum_list.append((maxtime, sum(counts), e-s))
 
-		if cell_states is not None:
-			sum_list.append((maxtime, len(cell_states), e-s))
+		if cell_state_sample_list is not None:
+			cell_state_samples = [s[0] for s in cell_state_sample_list]
+		if cell_state_samples is not None:
+			sum_list.append((maxtime, sum([len(l) for l in cell_state_samples]), e-s))
 #raise ValueError()
 import pylab as plt
+print("plotting")
 if len(sum_list) > 1:
 	plt.figure()
 	plt.subplot(121)
@@ -98,8 +105,12 @@ if len(sum_list) > 1:
 	plt.xlabel("Total Cells Simulated (Lineage)\nOR\nFinal Cells Returned (Propogate)")
 	plt.ylabel("CPU runtime (s)")
 
+if result is not None:
+	single_cell_states = result
+
 if single_cell_states is not None:
 	plt.figure()
+	
 	plt.subplot(131)
 	plt.title("volume")
 	plt.plot(single_cell_states["time"], single_cell_states["volume"])
@@ -117,19 +128,31 @@ if single_cell_states is not None:
 	plt.title("S")
 	plt.plot(single_cell_states["time"], single_cell_states["S"])
 
-if cell_states is not None:
+
+if cell_state_samples is not None:
 	plt.figure()
-	plt.subplot(131)
-	plt.title("volume histogram")
-	plt.hist(cell_states["volume"])
+	print("len cell_state_samples", len(cell_state_samples), [len(s) for s in cell_state_samples])
+	ax1, ax2, ax3 = plt.subplot(131), plt.subplot(132), plt.subplot(133)
 
-	plt.subplot(132)
-	plt.title("X histogram")
-	plt.hist(cell_states["X"])
+	for i in range(len(sample_times)-1, -1, -1):
 
-	plt.subplot(133)
-	plt.title("S histogram")
-	plt.hist(cell_states["S"])
+		df = cell_state_samples[i]
+		time = sample_times[i]
+
+		plt.sca(ax1)
+		plt.title("volume histogram")
+		plt.hist(df["volume"], log = True, label = "Sample Time = "+str(i)+" Cells="+str(len(df["volume"])))
+		if i == 0: plt.legend()
+
+		plt.sca(ax2)
+		plt.title("X histogram")
+		plt.hist(df["X"], log = True, label = "Sample Time = "+str(i)+" Cells="+str(len(df["volume"])))
+		if i == 0: plt.legend()
+
+		plt.sca(ax3)
+		plt.title("S histogram")
+		plt.hist(df["S"], log = True, label = "Sample Time = "+str(i)+" Cells="+str(len(df["volume"])))
+		if i == 0: plt.legend()
 
 if lineage is not None:
 	color_list = []
@@ -138,7 +161,7 @@ if lineage is not None:
 
 	import pylab as plt
 	plt.figure(figsize = (10, 10))
-	print("plotting")
+	
 
 	plt.subplot(411)
 	plt.title(r"$\emptyset \leftrightarrow S$    $P(Grow) = k \frac{1}{S^2+400}$")
